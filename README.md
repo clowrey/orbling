@@ -9,6 +9,12 @@ it was raised) as an adult. Old pets leave an egg that takes after them, so a fa
 Nine mini games, five of them times-tables and division practice, earn coins for a shop and a prize stand. In
 Home Assistant the pet shows up with its stats, care buttons and a "needs attention" sensor to notify on.
 
+<p>
+  <img src="docs/photo-pet.jpg" width="32%" alt="A pet in a party hat on the JC3636W518">
+  <img src="docs/photo-hand.jpg" width="32%" alt="The board in hand, plugged into USB and headphones">
+  <img src="docs/photo-games.jpg" width="32%" alt="The game menu on the board">
+</p>
+
 ![screens](docs/screens.png)
 ![random pets](docs/gallery.png)
 

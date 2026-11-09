@@ -1,0 +1,4 @@
+/.esphome/
+/secrets.yaml
+sim/out/
+__pycache__/

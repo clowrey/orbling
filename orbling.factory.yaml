@@ -1,0 +1,31 @@
+# The firmware the web installer flashes (built by .github/workflows/build.yml): orbling.yaml plus Wi-Fi
+# setup over USB, the Device Builder's "Adopt" button, and updates from GitHub as a Home Assistant update entity.
+packages:
+  core: !include orbling.yaml
+
+substitutions:
+  # Build the component from this checkout, so a release matches its own source.
+  orbling_source: components
+
+esphome:
+  project:
+    name: clowrey.orbling
+    version: dev  # replaced with the release version by the build workflow
+
+# What "Adopt" in the ESPHome Device Builder puts in the new device's config.
+dashboard_import:
+  package_import_url: github://clowrey/orbling/orbling.yaml@main
+  import_full_config: false
+
+# Wi-Fi details from the web installer, over USB, right after flashing.
+improv_serial:
+
+http_request:
+
+ota:
+  - platform: http_request
+
+update:
+  - platform: http_request
+    name: Firmware
+    source: https://clowrey.github.io/orbling/firmware/orbling.manifest.json

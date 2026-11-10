@@ -106,6 +106,7 @@ static void button_pos(int i, int &x, int &y) {
 }
 
 static inline int sq(int v) { return v * v; }
+static const int TT_DRAG_PX = 22;  // times tables: one table per this much drag up or down
 
 // ---------------------------------------------------------------------------------------------
 // Procedural sprite
@@ -1158,7 +1159,7 @@ void PetEngine::loop(uint32_t now) {
 
 int PetEngine::wanted_fps() const {
   if (overlay_ == OV_GAME) return 25;
-  if (page_ == PAGE_TABLES && tables_animating(now_)) return 25;
+  if (page_ == PAGE_TABLES && (pressed_ || tables_animating(now_))) return 25;  // smooth while dragging
   if (!s_.lights_on && !pressed_ && (now_ - last_user_ > 20000 || last_user_ == 0)) return 2;
   if (is_dozing(now_) && !pressed_) return 4;
   return 15;
@@ -2113,6 +2114,9 @@ void PetEngine::touch_down(int x, int y, uint32_t now) {
   ty0_ = ty_ = y;
   press_ms_ = now;
   last_user_ = now ? now : 1;
+  tt_drag_y_ = (int16_t) y;
+  tt_lock_ = 0;
+  tt_dragged_ = false;
   if (overlay_ == OV_GAME && page_ == 0) {
     game_touch_ = true;
     game_press(x, y);
@@ -2124,6 +2128,18 @@ void PetEngine::touch_move(int x, int y) {
   ty_ = y;
   if (overlay_ == OV_GAME && (game_kind_ == GAME_CATCH || game_kind_ == GAME_MUNCH) && pressed_)
     catch_target_ = (float) x;  // drag to move
+  if (page_ == PAGE_TABLES && overlay_ == OV_NONE && pressed_) {
+    int dx = x - tx0_, dy = y - ty0_;
+    if (tt_lock_ == 0 && (abs(dx) > 14 || abs(dy) > 14)) tt_lock_ = abs(dy) > abs(dx) ? 1 : -1;
+    if (tt_lock_ == 1) {
+      int steps = (tt_drag_y_ - y) / TT_DRAG_PX;  // up: the next tables, down: the ones before
+      if (steps) {
+        tables_step(steps);
+        tt_drag_y_ = (int16_t) (tt_drag_y_ - steps * TT_DRAG_PX);
+        tt_dragged_ = true;
+      }
+    }
+  }
 }
 
 void PetEngine::touch_up(uint32_t now) {
@@ -2140,14 +2156,11 @@ void PetEngine::touch_up(uint32_t now) {
     game_touch_ = false;
     return;
   }
+  if (page_ == PAGE_TABLES && (tt_dragged_ || tt_lock_ == 1)) return;
   int dx = tx_ - tx0_, dy = ty_ - ty0_;
   if (abs(dx) > 70 && abs(dx) > abs(dy) && overlay_ == OV_NONE) {
     page_ = (uint8_t) ((page_ + (dx < 0 ? 1 : PAGE_COUNT - 1)) % PAGE_COUNT);
     if (page_ == PAGE_TABLES) tables_start_sweep();
-    return;
-  }
-  if (page_ == PAGE_TABLES && abs(dy) > 50 && abs(dy) > abs(dx)) {  // up: next table, down: previous
-    tables_step(dy < 0 ? 1 : -1);
     return;
   }
   if (!long_fired_) tap(tx0_, ty0_);
@@ -3455,22 +3468,17 @@ void PetEngine::tables_start_sweep() {
   tt_sel_ = 0;
 }
 
-void PetEngine::tables_step(int dir) {
-  tt_table_ = (uint8_t) ((tt_table_ - 1 + dir + 12) % 12 + 1);
-  tt_dir_ = (int8_t) dir;
-  tt_change_ms_ = now_ ? now_ : 1;
-  if (tt_sel_) {
-    tt_sel_ms_ = tt_change_ms_;  // keep the picked fact (7 x 8 becomes 8 x 8) and redraw its dots
-    tt_sweep_ms_ = 0;
-  } else {
-    tables_start_sweep();
-  }
+// Instant, with no animation, so a drag can run through the tables quickly. A picked fact stays picked
+// (7 x 8 becomes 8 x 8).
+void PetEngine::tables_step(int steps) {
+  tt_table_ = (uint8_t) ((tt_table_ - 1 + steps % 12 + 12) % 12 + 1);
+  tt_sweep_ms_ = 0;
+  tt_sel_ms_ = 0;
 }
 
 bool PetEngine::tables_animating(uint32_t now) const {
   if (tt_sweep_ms_ && now - tt_sweep_ms_ < (uint32_t) (12 * TT_STEP_MS + 600)) return true;
-  if (tt_sel_ && now - tt_sel_ms_ < 1200) return true;
-  return tt_change_ms_ && now - tt_change_ms_ < 300;
+  return tt_sel_ && tt_sel_ms_ && now - tt_sel_ms_ < 1200;
 }
 
 void PetEngine::tables_tap(int x, int y) {
@@ -3570,9 +3578,7 @@ void PetEngine::draw_tables(Canvas &c, uint32_t now) {
   snprintf(buf, sizeof(buf), "%d", (n + 10) % 12 + 1);
   text(c, 180, TT_DOWN_Y - 12, buf, 1, 0x8A80B0, true, false);
 
-  // The middle. A new table slides its number in from the side it came from.
-  int slide = 0;
-  if (tt_change_ms_ && now - tt_change_ms_ < 200) slide = tt_dir_ * (int) (24 * (1.0f - (now - tt_change_ms_) / 200.0f));
+  // The middle.
   if (tt_sel_) {
     // A picture of n x k: k rows of n dots, the rows appearing one by one.
     int k = tt_sel_, big = n > k ? n : k;
@@ -3581,12 +3587,12 @@ void PetEngine::draw_tables(Canvas &c, uint32_t now) {
     int dot = p - 2 < 2 ? 2 : p - 2;
     int gw = n * p + (n - 1) / 5 * 2, gh = k * p + (k - 1) / 5 * 2;  // a small gap every five, for counting
     int ox = 180 - gw / 2, oy = 148 - gh / 2;
-    int rows = (int) ((now - tt_sel_ms_) / 70) + 1;
+    int rows = tt_sel_ms_ ? (int) ((now - tt_sel_ms_) / 70) + 1 : k;  // row by row just after a tap
     for (int r = 0; r < k && r < rows; r++)
       for (int q = 0; q < n; q++)
         rect(c, ox + q * p + q / 5 * 2, oy + r * p + r / 5 * 2, dot, dot, r % 2 ? mix(col, 0xFFFFFF, 0.3f) : col);
     snprintf(buf, sizeof(buf), "%d x %d = %d", n, k, n * k);
-    text(c, 180, 202 + slide, buf, 3, 0xFFFFFF);
+    text(c, 180, 202, buf, 3, 0xFFFFFF);
     snprintf(buf, sizeof(buf), "%d row%s of %d", k, k == 1 ? "" : "s", n);
     text(c, 180, 234, buf, 2, 0xC9C2E8, true, false);
   } else if (sweeping) {
@@ -3594,14 +3600,14 @@ void PetEngine::draw_tables(Canvas &c, uint32_t now) {
     snprintf(buf, sizeof(buf), "%d x %d", n, shown);
     text(c, 180, 118, buf, 3, 0xC9C2E8);
     snprintf(buf, sizeof(buf), "%d", n * shown);
-    text(c, 180, 152 + slide, buf, 7, col);
+    text(c, 180, 152, buf, 7, col);
     text(c, 180, 220, "counting up...", 2, 0x8A80B0, true, false);
   } else {
     text(c, 180, 116, "TIMES TABLE", 2, 0xC9C2E8, true, false);
     snprintf(buf, sizeof(buf), "%d", n);
-    text(c, 180, 140 + slide, buf, 8, col);
+    text(c, 180, 140, buf, 8, col);
     text(c, 180, 208, "tap an answer", 2, 0x8A80B0, true, false);
-    text(c, 180, 228, "swipe up/down", 2, 0x8A80B0, true, false);
+    text(c, 180, 228, "drag up/down", 2, 0x8A80B0, true, false);
   }
 }
 

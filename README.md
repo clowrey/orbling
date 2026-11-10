@@ -131,8 +131,9 @@ energy, Jump and Catch burn a little weight, and each game keeps its best score.
 
 **Times tables** (a homework helper, one swipe right from the pet) lays a table out like a clock: x1 at one
 o'clock round to x12 at twelve, so the whole table is on the screen at once. It opens by counting up: a light sweeps
-round the ring and each answer pops in while the middle counts 7, 14, 21... Swipe up or down (or tap the small
-arrows) for the next or previous table, 1 to 12. Tap an answer to see that fact in the middle with a picture of it:
+round the ring and each answer pops in while the middle counts 7, 14, 21... Drag up or down to run through the
+tables, 1 to 12: they change straight away as your finger moves, one table for every 22 px or so, so one long drag
+goes through several (up for bigger tables). The small arrows step one at a time. Tap an answer to see that fact in the middle with a picture of it:
 7 x 8 shows 8 rows of 7 dots, with a gap every five to make counting easy. Changing table keeps the picked fact
 (7 x 8 becomes 8 x 8). Tap the middle to go back to the table, and again to count it up again. It is not a game:
 no coins or Smarts.

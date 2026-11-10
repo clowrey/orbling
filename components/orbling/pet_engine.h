@@ -359,7 +359,7 @@ class PetEngine {
   // Times-table page: the table as a clock face, a count-up sweep, and a dot picture of a picked fact.
   void draw_tables(Canvas &c, uint32_t now);
   void tables_tap(int x, int y);
-  void tables_step(int dir);  // next (+1) or previous (-1) table
+  void tables_step(int steps);  // +n: n tables on, -n: n back (wraps 12 -> 1)
   void tables_start_sweep();
   bool tables_animating(uint32_t now) const;
 
@@ -396,9 +396,11 @@ class PetEngine {
   // times-table page
   uint8_t tt_table_{2};       // 1..12
   uint8_t tt_sel_{0};         // picked fact, table x tt_sel_ (1..12); 0 none
-  int8_t tt_dir_{0};          // which way the table number last changed, for its slide-in
   uint32_t tt_sweep_ms_{0};   // when the count-up sweep started; 0 none
-  uint32_t tt_sel_ms_{0}, tt_change_ms_{0};
+  uint32_t tt_sel_ms_{0};     // when an answer was tapped (its dots appear row by row)
+  int16_t tt_drag_y_{0};      // a drag up or down runs through the tables: y of the last step
+  int8_t tt_lock_{0};         // this touch: 0 undecided, 1 up/down (tables), -1 sideways (pages)
+  bool tt_dragged_{false};    // this touch changed the table, so it is not a tap
   Overlay overlay_{OV_NONE};
   uint32_t overlay_since_{0};
   Activity act_{ACT_IDLE};

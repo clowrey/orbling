@@ -685,20 +685,20 @@ int main(int argc, char **argv) {
     y = 180 - (int) lroundf(142 * cosf(k * 3.14159265f / 6));
   };
   int rx, ry;
+  now += 2000;  // let the settings page's "Hold to confirm" go
+  e.loop(now);
   swipe(300, 180, 120, 185);
-  for (int i = 0; i < 5; i++) swipe(180, 250, 180, 140);  // up five times: the 7 times table
-  now += 4 * 160 + 60;
+  now += 4 * 160 + 60;  // the page opens counting up (the 2 times table)
   e.loop(now);
   shot(e, "21a-tables-counting", now);
-  now += 3000;
-  e.loop(now);
+  swipe(180, 250, 180, 140);  // one 110 px drag up: five tables on, to 7, straight away
   shot(e, "21b-tables", now);
   ring_xy(8, rx, ry);
   tap(e, rx, ry, now);  // pick 7 x 8
   now += 1500;
   e.loop(now);
   shot(e, "21c-tables-7x8", now);
-  for (int i = 0; i < 5; i++) swipe(180, 250, 180, 140);  // on to 12, keeping the picked x8
+  swipe(180, 250, 180, 140);  // on to 12, keeping the picked x8
   ring_xy(12, rx, ry);
   tap(e, rx, ry, now);  // pick x12: the biggest picture
   now += 1500;

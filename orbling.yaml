@@ -280,18 +280,21 @@ button:
 # The pet dims the backlight when its lights are off; a touch brightens it for 20 s.
 interval:
   # Chant: listen while the game wants to (its mic is on, someone is there), using Home Assistant's
-  # speech-to-text. The microphone is only on during the game.
-  - interval: 250ms
+  # speech-to-text. The microphone is only on during the game. One phrase per run, started only while Home
+  # Assistant has no run open (see on_start / on_end below for why).
+  - interval: 100ms
     then:
       - lambda: |-
-          static uint32_t last_start = 0;
           auto &p = id(pet).pet();
           p.set_voice_link(api::global_api_server != nullptr && api::global_api_server->is_connected());
           bool want = p.wants_listening();
           bool running = id(va).is_running();
-          if (want && !running && millis() - last_start > 3000) {
-            id(va).request_start(true, true);  // keep listening; each pause ends a phrase
-            last_start = millis();
+          uint32_t now = millis();
+          if (id(va_ha_busy) && !running && now - id(va_changed) > 8000) id(va_ha_busy) = false;  // end got lost
+          if (want && !running && !id(va_ha_busy) && now - id(va_changed) > 300) {
+            id(va).request_start(false, true);  // one phrase: it ends when the speaker pauses
+            id(va_waiting) = true;
+            id(va_changed) = now;
           } else if (!want && running) {
             id(va).request_stop();
           }
@@ -389,6 +392,23 @@ microphone:
     adc_type: external
     pdm: false
     channel: left
+    # The level reaching the mic, once a second while it listens (in the logs, to check speech isn't too quiet
+    # or clipping). Raw 16-bit peak: room noise is about 100, a clear voice a few thousand.
+    on_data:
+      - lambda: |-
+          static int32_t peak = 0;
+          static uint32_t last = 0;
+          const int32_t *v = (const int32_t *) x.data();
+          for (size_t i = 0; i < x.size() / 4; i++) {
+            int32_t a = v[i] >> 16;
+            if (a < 0) a = -a;
+            if (a > peak) peak = a;
+          }
+          if (millis() - last > 1000) {
+            ESP_LOGD("chant", "mic peak %d", (int) peak);
+            peak = 0;
+            last = millis();
+          }
 
 # Speech-to-text through Home Assistant's Assist pipeline (the one chosen for this device in Home Assistant).
 # Only the text matters: there is no speaker for replies.
@@ -396,17 +416,65 @@ voice_assistant:
   id: va
   microphone:
     microphone: mic
-    gain_factor: 8
+    gain_factor: 2
   use_wake_word: false
   noise_suppression_level: 2
   auto_gain: 31dBFS
   volume_multiplier: 1.0
+  on_stt_vad_end:  # the speaker paused: Home Assistant is now working out what was said
+    - lambda: id(pet).pet().set_thinking(true);
   on_stt_end:
-    - lambda: id(pet).pet().voice_heard(x.c_str());
+    - lambda: |-
+        id(pet).pet().set_thinking(false);
+        id(pet).pet().voice_heard(x.c_str());
+  # Home Assistant ends a run it still has open when a new one starts, and its "run ended" then reaches the
+  # device after the new run began: the device takes it for the new run's end and stops the microphone without
+  # telling Home Assistant, which keeps that run open too, and the next start repeats it forever. So: a run
+  # counts as open from its "running" to its "ended"; a new one only starts when none is; and if an "ended"
+  # arrives before our run's "running" (an older run's), the run that then starts is told to stop at once.
+  on_start:  # Home Assistant's "run started"
+    - lambda: |-
+        id(va_changed) = millis();
+        id(va_ha_busy) = true;
+        if (id(va_orphan)) {
+          id(va_orphan) = false;
+          // ESPHome stopped the mic for this run already, but never told Home Assistant: tell it now (the
+          // same message ESPHome sends when it stops a run itself).
+          auto *conn = id(va).get_api_connection();
+          if (conn != nullptr) {
+            ESP_LOGD("chant", "stopping a run that was cut off before it began");
+            api::VoiceAssistantRequest msg;
+            msg.start = false;
+            conn->send_message(msg);
+          }
+        }
+        id(va_waiting) = false;
+  on_end:  # Home Assistant's "run ended", for whichever run it was
+    - lambda: |-
+        id(va_changed) = millis();
+        id(pet).pet().set_thinking(false);
+        if (id(va_waiting)) id(va_orphan) = true;  // an older run's end, and it cut ours off before it began
+        id(va_ha_busy) = false;
   on_error:
     - lambda: |-
         ESP_LOGW("chant", "voice error %s: %s", code.c_str(), message.c_str());
+        if (code == "not-connected") id(va_waiting) = false;  // that run never started
+        id(pet).pet().set_thinking(false);
         id(pet).pet().voice_error(code.c_str());
+
+globals:
+  - id: va_ha_busy  # Home Assistant has a run open (between its "running" and "ended")
+    type: bool
+    initial_value: "false"
+  - id: va_waiting  # we asked for a run and its "running" hasn't come yet
+    type: bool
+    initial_value: "false"
+  - id: va_orphan  # that run was cut off by an older run's "ended": stop it when it starts
+    type: bool
+    initial_value: "false"
+  - id: va_changed
+    type: uint32_t
+    initial_value: "0"
 
 spi:
   id: display_qspi

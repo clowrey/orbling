@@ -431,6 +431,7 @@ static void fuzz(PetEngine &e) {
         e.voice_heard(said);
         if (rnd() % 5 == 0) e.voice_error(rnd() % 2 ? "stt-no-text-recognized" : "stt-provider-missing");
         e.set_listening(rnd() % 2);
+        e.set_thinking(rnd() % 3 == 0);
         e.set_voice_link(rnd() % 4 != 0);
       }
       if (i % 50 == 0) {

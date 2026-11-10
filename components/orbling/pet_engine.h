@@ -187,6 +187,7 @@ class PetEngine {
   // speech-to-text while wants_listening() and passes the text it hears to voice_heard().
   bool wants_listening() const;
   void set_listening(bool on) { listening_ = on; }
+  void set_thinking(bool on) { thinking_ = on; }  // speech ended; waiting for the text to come back
   void set_voice_link(bool up) { voice_link_ = up; }  // connected to Home Assistant, so voice can work
   void voice_heard(const char *text);
   void voice_error(const char *code);
@@ -438,7 +439,7 @@ class PetEngine {
   bool ch_champion_{false};   // this gift completed all twelve medals
   uint8_t ch_gift_coins_{0};
   uint32_t ch_wrong_ms_{0}, ch_ok_ms_{0}, ch_gift_ms_{0}, ch_heard_ms_{0}, ch_err_until_{0};
-  bool listening_{false}, voice_link_{false};
+  bool listening_{false}, thinking_{false}, voice_link_{false};
   char ch_heard_[44]{};       // what speech-to-text last heard (or a voice error), shown small
   Overlay overlay_{OV_NONE};
   uint32_t overlay_since_{0};

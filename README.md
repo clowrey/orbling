@@ -298,7 +298,12 @@ What it needs in Home Assistant:
   numbers are not commands, so nothing happens. Avoid one whose agent is an LLM allowed to control the house. You
   can pick the pipeline on the device's page in Home Assistant.
 
-The mic line on the Chant screen shows what is going on: **listening** (green), **mic starting**, **mic paused**
+How quick it feels depends on the speech-to-text: each phrase is sent when the speaker pauses, and the answer
+lights up when the text comes back. Numbers are easy to recognise, so on a small machine a small, fast model
+(Whisper `base` or `small`) is a better choice than a big accurate one.
+
+The mic line on the Chant screen shows what is going on: **listening** (green), **thinking...** while Home
+Assistant turns a phrase into text, **mic starting**, **mic paused**
 after a voice error (it says which), **tap only** with no Home Assistant connection, or **mic off**; what it last
 heard shows underneath for a few seconds.
 

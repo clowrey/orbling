@@ -3690,7 +3690,10 @@ bool PetEngine::wants_listening() const {
 void PetEngine::voice_error(const char *code) {
   if (code == nullptr) return;
   // Silence and "didn't catch that" are normal while someone thinks; only real failures pause the mic.
-  if (strstr(code, "no-text") || strstr(code, "timeout") || strstr(code, "no_text") || strstr(code, "cancel")) return;
+  // "not-connected" is a start that did not get through this time: the next one is tried straight away.
+  if (strstr(code, "no-text") || strstr(code, "timeout") || strstr(code, "no_text") || strstr(code, "cancel") ||
+      strstr(code, "not-connected"))
+    return;
   ch_err_until_ = now_ + 15000;
   snprintf(ch_heard_, sizeof(ch_heard_), "voice: %.34s", code);
   ch_heard_ms_ = now_ ? now_ : 1;
@@ -3937,6 +3940,9 @@ void PetEngine::draw_mic_status(Canvas &c, uint32_t now, int y) {
   } else if (err) {
     label = "mic paused";
     col = 0xFF9A3C;
+  } else if (want && thinking_) {
+    label = "thinking...";  // Home Assistant is turning the speech into text
+    col = 0xFFD23F;
   } else if (want && listening_) {
     label = "listening";
     col = 0x7CFF8A;
@@ -3947,7 +3953,7 @@ void PetEngine::draw_mic_status(Canvas &c, uint32_t now, int y) {
   }
   int w = 24 + 6 + (int) strlen(label) * 12;
   int x0 = 180 - w / 2;
-  if (on && voice_link_ && want && listening_) {
+  if (on && voice_link_ && want && listening_ && !thinking_) {
     int r = 15 + (int) (2 * sinf(now / 160.0f));
     circle(c, x0 + 12, y + 12, r, 0x1F4A2E);
   }

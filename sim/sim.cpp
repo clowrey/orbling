@@ -784,16 +784,14 @@ int main(int argc, char **argv) {
     now += 600;
     e.loop(now);
     shot(e, "22b-chant-voice", now);
-    ring(9, x, y);
-    tap(e, x, y, now);  // 63 is not next: it wiggles, nothing lost
     ring(7, x, y);
-    tap(e, x, y, now);  // 49
+    tap(e, x, y, now);  // a tap on 49 does not count: answers have to be said
+    e.voice_heard("forty nine");
     now += 5000;        // stuck for a moment: 56 glows
     e.loop(now);
     shot(e, "22c-chant-hint", now);
     for (int k = 8; k <= 12; k++) {
-      ring(k, x, y);
-      tap(e, x, y, now);
+      e.voice_heard(std::to_string(7 * k).c_str());
       now += 300;
       e.loop(now);
     }

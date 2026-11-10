@@ -190,6 +190,8 @@ class PetEngine {
   void set_thinking(bool on) { thinking_ = on; }  // speech ended; waiting for the text to come back
   void set_voice_link(bool up) { voice_link_ = up; }  // connected to Home Assistant, so voice can work
   void voice_heard(const char *text);
+  // Changes whenever Chant moves on (a table picked or finished): what was said before no longer counts.
+  uint8_t voice_epoch() const { return ch_epoch_; }
   void voice_error(const char *code);
   bool voice_enabled() const { return !(s_.settings & 2); }
   void set_voice_enabled(bool on);
@@ -436,6 +438,7 @@ class PetEngine {
   uint8_t ch_slot_[12]{};     // clock position (1..12) of each answer: in order at first, shuffled once learnt
   int8_t ch_wrong_{-1};       // the answer that was tapped out of turn (it wiggles)
   int8_t ch_gift_item_{-1};   // a treat in the gift, or -1 for the table's medal
+  uint8_t ch_epoch_{0};
   bool ch_champion_{false};   // this gift completed all twelve medals
   uint8_t ch_gift_coins_{0};
   uint32_t ch_wrong_ms_{0}, ch_ok_ms_{0}, ch_gift_ms_{0}, ch_heard_ms_{0}, ch_err_until_{0};

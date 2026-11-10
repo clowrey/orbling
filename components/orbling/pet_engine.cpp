@@ -1292,6 +1292,7 @@ bool PetEngine::start_game(int kind) {
   if (kind == GAME_CHANT) {  // no "tap to start": it opens on picking a table
     run_phase_ = RUN_GO;
     ch_state_ = 0;
+    ch_epoch_++;
     ch_ok_ms_ = now_ ? now_ : 1;
     ch_heard_[0] = 0;
     ch_err_until_ = 0;
@@ -3786,8 +3787,8 @@ int PetEngine::parse_numbers(const char *text, int *out, int max) {
 
 void PetEngine::voice_heard(const char *text) {
   if (text == nullptr) return;
-  snprintf(ch_heard_, sizeof(ch_heard_), "%s", text);
-  if (strlen(text) >= sizeof(ch_heard_)) strcpy(ch_heard_ + sizeof(ch_heard_) - 4, "...");
+  size_t tlen = strlen(text);  // keep the end: with continuous listening the newest words are last
+  snprintf(ch_heard_, sizeof(ch_heard_), "%s", tlen >= sizeof(ch_heard_) ? text + tlen - (sizeof(ch_heard_) - 1) : text);
   ch_heard_ms_ = now_ ? now_ : 1;
   if (overlay_ != OV_GAME || game_kind_ != GAME_CHANT) return;
   last_user_ = ch_heard_ms_;  // someone is talking to it: it is not alone
@@ -3797,7 +3798,7 @@ void PetEngine::voice_heard(const char *text) {
   int nums[24];
   int count = parse_numbers(text, nums, 24);
   if (ch_state_ == 0) {  // "seven" (or "the seven times table") picks a table
-    for (int i = 0; i < count; i++)
+    for (int i = count - 1; i >= 0; i--)  // the last one said
       if (nums[i] >= 1 && nums[i] <= 12) {
         chant_begin(nums[i]);
         return;
@@ -3820,6 +3821,7 @@ void PetEngine::voice_heard(const char *text) {
 }
 
 void PetEngine::chant_begin(int table) {
+  ch_epoch_++;
   ch_table_ = (uint8_t) table;
   ch_next_ = 0;
   ch_state_ = 1;
@@ -3845,6 +3847,7 @@ void PetEngine::chant_hit(int k) {
 }
 
 void PetEngine::chant_complete() {
+  ch_epoch_++;
   ch_state_ = 2;
   ch_gift_ms_ = now_ ? now_ : 1;
   if (run_score_ < 65535) run_score_++;
@@ -3902,12 +3905,11 @@ void PetEngine::chant_press(int x, int y) {
       int bx, by;
       tt_pos((float) ch_slot_[k - 1], bx, by);
       if (sq(x - bx) + sq(y - by) >= (TT_BR + 8) * (TT_BR + 8)) continue;
-      if (k == ch_next_ + 1) {
-        chant_hit(k);
-      } else if (k > ch_next_) {  // not yet: a little wiggle, nothing lost
+      if (k > ch_next_) {  // answers have to be said out loud: a tap only wiggles the bubble
         ch_wrong_ = (int8_t) k;
         ch_wrong_ms_ = now_ ? now_ : 1;
         sound(SND_KEY);
+        show_toast("Say it out loud!", 1500);
       }
       return;
     }
@@ -3961,7 +3963,8 @@ void PetEngine::draw_mic_status(Canvas &c, uint32_t now, int y) {
   text(c, x0 + 30, y + 6, label, 2, col, false, false);
   if (ch_heard_[0] && now - ch_heard_ms_ < 6000) {
     char buf[30];
-    snprintf(buf, sizeof(buf), "\"%.24s\"", ch_heard_);
+    size_t hl = strlen(ch_heard_);
+    snprintf(buf, sizeof(buf), "\"%.24s\"", hl > 24 ? ch_heard_ + hl - 24 : ch_heard_);
     text(c, 180, y + 32, buf, 1, 0xC9C2E8, true, false);
   }
 }
@@ -3988,7 +3991,7 @@ void PetEngine::draw_chant(Canvas &c, uint32_t now) {
     }
     text(c, 180, 90, "CHANT", 3, 0xFFFFFF);
     text(c, 180, 124, "pick a table", 2, 0xC9C2E8, true, false);
-    text(c, 180, 144, "say or tap it", 2, 0x8A80B0, true, false);
+    text(c, 180, 144, "then say it!", 2, 0x8A80B0, true, false);
     snprintf(buf, sizeof(buf), "medals %d/12", chant_medals());
     text(c, 180, 176, buf, 2, 0xFFD23F, true, false);
     draw_mic_status(c, now, CH_MIC_Y);

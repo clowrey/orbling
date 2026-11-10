@@ -114,10 +114,13 @@ struct SaveData {
   uint16_t owned2;  // more owned items: bit (id - 16) for ItemId 16 and up (v7; was padding, so zero before)
   uint16_t best_share;  // the division game (v8)
   uint16_t owned3;      // owned items 32-47: bit (id - 32) (v8; was padding, so zero before)
+  uint16_t chant_medals;  // Chant: bit (n - 1) once the n times table has been chanted all through (v9)
+  uint16_t best_chant;    // Chant: most tables finished in one game (v9)
 };
 
 enum GameKind : uint8_t {
-  GAME_JUMP, GAME_CATCH, GAME_POP, GAME_COPY, GAME_QUIZ, GAME_FACTS, GAME_FIZZ, GAME_MUNCH, GAME_SHARE, GAME_COUNT
+  GAME_JUMP, GAME_CATCH, GAME_POP, GAME_COPY, GAME_QUIZ, GAME_FACTS, GAME_FIZZ, GAME_MUNCH, GAME_SHARE, GAME_CHANT,
+  GAME_COUNT
 };
 inline bool is_math_game(int kind) { return kind >= GAME_QUIZ && kind < GAME_COUNT; }
 // Quiz-style games: ten questions, four answers to tap.
@@ -131,6 +134,7 @@ static const size_t SAVE_V4_SIZE = 68;  // before time-together growth and the s
 static const size_t SAVE_V5_SIZE = 80;  // before the times-tables games
 static const size_t SAVE_V6_SIZE = 84;  // before smarts, Fizz and Munch
 static const size_t SAVE_V7_SIZE = 92;  // before the division game
+static const size_t SAVE_V8_SIZE = 96;  // before Chant
 static_assert(offsetof(SaveData, best_run) == SAVE_V1_SIZE, "v1 fields must stay where they were");
 static_assert(offsetof(SaveData, discipline) == SAVE_V2_SIZE, "v2 fields must stay where they were");
 static_assert(offsetof(SaveData, best_catch) == SAVE_V3_SIZE, "v3 fields must stay where they were");
@@ -138,7 +142,8 @@ static_assert(offsetof(SaveData, together_s) == SAVE_V4_SIZE, "v4 fields must st
 static_assert(offsetof(SaveData, best_quiz) == SAVE_V5_SIZE, "v5 fields must stay where they were");
 static_assert(offsetof(SaveData, best_fizz) == SAVE_V6_SIZE, "v6 fields must stay where they were");
 static_assert(offsetof(SaveData, best_share) == SAVE_V7_SIZE, "v7 fields must stay where they were");
-static_assert(sizeof(SaveData) == 96, "save size");
+static_assert(offsetof(SaveData, chant_medals) == SAVE_V8_SIZE, "v8 fields must stay where they were");
+static_assert(sizeof(SaveData) == 100, "save size");
 
 // Growth by time together (seconds of SaveData::together_s) at which each stage starts, and when an elder
 // sets off and leaves an egg.
@@ -177,6 +182,19 @@ class PetEngine {
   void render(Canvas &c, uint32_t now_ms);
   // Frames per second worth drawing right now (sleeping in the dark needs few).
   int wanted_fps() const;
+
+  // Chant (times tables by heart): voice input. The ESPHome config streams the microphone to Home Assistant's
+  // speech-to-text while wants_listening() and passes the text it hears to voice_heard().
+  bool wants_listening() const;
+  void set_listening(bool on) { listening_ = on; }
+  void set_voice_link(bool up) { voice_link_ = up; }  // connected to Home Assistant, so voice can work
+  void voice_heard(const char *text);
+  void voice_error(const char *code);
+  bool voice_enabled() const { return !(s_.settings & 2); }
+  void set_voice_enabled(bool on);
+  int chant_medals() const;  // tables with a medal, 0..12
+  // The numbers in a piece of text, as digits ("7, 14") or words ("seven fourteen", "a hundred and eight").
+  static int parse_numbers(const char *text, int *out, int max);
   float backlight(uint32_t now_ms) const;
 
   void touch_down(int x, int y, uint32_t now_ms);
@@ -362,6 +380,15 @@ class PetEngine {
   void tables_step(int steps);  // +n: n tables on, -n: n back (wraps 12 -> 1)
   void tables_start_sweep();
   bool tables_animating(uint32_t now) const;
+  // Chant: pick a table, then tap (or say) its answers in order round a circle; a gift for each table done.
+  void chant_press(int x, int y);
+  void chant_begin(int table);
+  void chant_hit(int k);  // the k-th answer (1..12) came, tapped or said
+  void chant_complete();
+  void chant_update();
+  void draw_chant(Canvas &c, uint32_t now);
+  void draw_mic_status(Canvas &c, uint32_t now, int y);
+  void food_effect(int id);  // what eating a food item does (bought, or a Chant gift)
 
   SaveData s_{};
   bool dirty_{false};
@@ -401,6 +428,18 @@ class PetEngine {
   int16_t tt_drag_y_{0};      // a drag up or down runs through the tables: y of the last step
   int8_t tt_lock_{0};         // this touch: 0 undecided, 1 up/down (tables), -1 sideways (pages)
   bool tt_dragged_{false};    // this touch changed the table, so it is not a tap
+  // Chant
+  uint8_t ch_state_{0};       // 0 pick a table, 1 chanting, 2 the gift
+  uint8_t ch_table_{1};
+  uint8_t ch_next_{0};        // answers done so far, 0..12
+  uint8_t ch_slot_[12]{};     // clock position (1..12) of each answer: in order at first, shuffled once learnt
+  int8_t ch_wrong_{-1};       // the answer that was tapped out of turn (it wiggles)
+  int8_t ch_gift_item_{-1};   // a treat in the gift, or -1 for the table's medal
+  bool ch_champion_{false};   // this gift completed all twelve medals
+  uint8_t ch_gift_coins_{0};
+  uint32_t ch_wrong_ms_{0}, ch_ok_ms_{0}, ch_gift_ms_{0}, ch_heard_ms_{0}, ch_err_until_{0};
+  bool listening_{false}, voice_link_{false};
+  char ch_heard_[44]{};       // what speech-to-text last heard (or a voice error), shown small
   Overlay overlay_{OV_NONE};
   uint32_t overlay_since_{0};
   Activity act_{ACT_IDLE};

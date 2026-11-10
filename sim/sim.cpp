@@ -416,6 +416,23 @@ static void fuzz(PetEngine &e) {
         case 2: e.touch_up(now); break;
         default: break;
       }
+      if (rnd() % 40 == 0) {  // a burst of random "speech": letters, digits, spaces, number words
+        static const char *const WORDS[] = {"seven", "fourteen", "twenty", "one", "hundred", "and", "a",
+                                            "next", "again", "done", "for", "eighty-four", "ninety", "x"};
+        char said[96];
+        int len = 0;
+        for (int w = 0; w < 1 + (int) (rnd() % 8) && len < 80; w++) {
+          if (rnd() % 3 == 0)
+            len += snprintf(said + len, sizeof(said) - len, "%u ", (unsigned) (rnd() % 200));
+          else
+            len += snprintf(said + len, sizeof(said) - len, "%s ", WORDS[rnd() % 14]);
+        }
+        said[len] = 0;
+        e.voice_heard(said);
+        if (rnd() % 5 == 0) e.voice_error(rnd() % 2 ? "stt-no-text-recognized" : "stt-provider-missing");
+        e.set_listening(rnd() % 2);
+        e.set_voice_link(rnd() % 4 != 0);
+      }
       if (i % 50 == 0) {
         struct Null : Canvas {
           void fill(int, int, int, int, uint32_t) override {}
@@ -619,6 +636,7 @@ int main(int argc, char **argv) {
   e.state().energy = 100;
   e.state().coins += 40;  // something to spend at the stand
   printf("share (screens): score %d\n", play_other(e, now, GAME_SHARE, 0.8f, 300000, "12j-share"));
+
   printf("smarts after the math games: %d, prizes owned: wizard %d trophy %d rocket %d owl %d\n", e.smarts(),
          e.owns(IT_WIZARD_HAT), e.owns(IT_TROPHY), e.owns(IT_ROCKET), e.owns(IT_OWL));
   for (int i = 0; i < 4; i++) {  // the result toast
@@ -708,6 +726,98 @@ int main(int argc, char **argv) {
   prep(e, 31, STAGE_ADULT);
   e.state().dead = 1;
   shot(e, "17-gone", now);
+  // Chant. First the number reader: what speech-to-text might write for a chant, and what it should get from it.
+  {
+    struct Case {
+      const char *text;
+      std::vector<int> want;
+    };
+    const Case cases[] = {
+        {"7, 14, 21", {7, 14, 21}},
+        {"Seven. Fourteen. Twenty-one.", {7, 14, 21}},
+        {"seven fourteen twenty one twenty eight", {7, 14, 21, 28}},
+        {"seventy seventy-seven eighty four", {70, 77, 84}},
+        {"a hundred and eight, one hundred twenty", {108, 120}},
+        {"one hundred and thirty two one hundred forty-four", {132, 144}},
+        {"eleven twelve thirteen", {11, 12, 13}},
+        {"seven times three is twenty one", {7, 3, 21}},
+        {"two for six ate", {2, 4, 6, 8}},
+        {"1,000 and 12", {1000, 12}},
+        {"", {}},
+        {"hello there", {}},
+    };
+    int bad = 0;
+    for (const auto &cs : cases) {
+      int got[24];
+      int n = PetEngine::parse_numbers(cs.text, got, 24);
+      bool ok = n == (int) cs.want.size();
+      for (int i = 0; ok && i < n; i++) ok = got[i] == cs.want[i];
+      if (!ok) {
+        printf("parse_numbers(\"%s\") gave", cs.text);
+        for (int i = 0; i < n; i++) printf(" %d", got[i]);
+        printf("\n");
+        bad++;
+      }
+    }
+    if (bad) abort();
+    printf("chant: number reader ok\n");
+  }
+  {
+    auto ring = [](int k, int &x, int &y) {
+      x = 180 + (int) lroundf(142 * sinf(k * 3.14159265f / 6));
+      y = 180 - (int) lroundf(142 * cosf(k * 3.14159265f / 6));
+    };
+    int x, y;
+    prep(e, 21, STAGE_TEEN);
+    e.state().chant_medals = 0x0F;  // the 1-4 times tables already done
+    e.set_voice_link(true);
+    e.start_game(GAME_CHANT);
+    e.set_listening(e.wants_listening());
+    e.loop(now);
+    shot(e, "22a-chant-pick", now);
+    e.voice_heard("the seven times table");  // picks 7
+    e.voice_heard("7, 14, 21");
+    now += 400;
+    e.loop(now);
+    e.voice_heard("twenty eight thirty-five forty two");
+    now += 600;
+    e.loop(now);
+    shot(e, "22b-chant-voice", now);
+    ring(9, x, y);
+    tap(e, x, y, now);  // 63 is not next: it wiggles, nothing lost
+    ring(7, x, y);
+    tap(e, x, y, now);  // 49
+    now += 5000;        // stuck for a moment: 56 glows
+    e.loop(now);
+    shot(e, "22c-chant-hint", now);
+    for (int k = 8; k <= 12; k++) {
+      ring(k, x, y);
+      tap(e, x, y, now);
+      now += 300;
+      e.loop(now);
+    }
+    now += 900;
+    e.loop(now);
+    shot(e, "22d-chant-gift-shake", now);
+    now += 1800;
+    e.loop(now);
+    shot(e, "22e-chant-medal", now);
+    if (!(e.state().chant_medals & (1 << 6))) {
+      printf("chant: no 7 medal\n");
+      abort();
+    }
+    tap(e, 103, 282, now);  // AGAIN: now with a medal, so shuffled
+    now += 400;
+    e.loop(now);
+    shot(e, "22f-chant-shuffled", now);
+    e.voice_heard("7 14 21 28 35 42 49 56 63 70 77 84");  // the whole table in one breath
+    now += 2800;
+    e.loop(now);
+    shot(e, "22g-chant-treat", now);
+    tap(e, 257, 282, now);  // DONE: on to the prize stand
+    printf("chant: medals %04x, stand open %d\n", e.state().chant_medals, (int) e.in_stand());
+    if (!e.in_stand()) abort();
+  }
 
   // Toys and hats: a pet with a cap, the plant and the ball; one dozing with its teddy; one asleep in bed.
   prep(e, 7, STAGE_ADULT);
@@ -749,6 +859,7 @@ int main(int argc, char **argv) {
 
   contact_sheet("screens", 4);
   contact_sheet("tables", 4, "21");
+  contact_sheet("chant", 4, "22");
   contact_sheet("games", 4, "12");
   contact_sheet("math", 4, "12f");
   {
@@ -809,9 +920,9 @@ int main(int argc, char **argv) {
   }
 
   printf("\nOther games, autoplay scores (5 runs each) by bot skill:\n");
-  static const char *const GAME_NAMES[GAME_COUNT] = {"jump", "catch", "pop", "copy", "quiz",
-                                                     "facts", "fizz", "munch", "share"};
-  for (int kind = GAME_CATCH; kind < GAME_COUNT; kind++)
+  static const char *const GAME_NAMES[GAME_COUNT] = {"jump", "catch", "pop",   "copy",  "quiz",
+                                                     "facts", "fizz",  "munch", "share", "chant"};
+  for (int kind = GAME_CATCH; kind < GAME_CHANT; kind++)  // Chant has its own test
     for (float skill : {0.6f, 0.85f, 0.97f}) {
       printf("  %-5s skill %.2f:", GAME_NAMES[kind], skill);
       for (int run = 0; run < 5; run++) {

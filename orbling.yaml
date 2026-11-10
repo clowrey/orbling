@@ -197,6 +197,16 @@ sensor:
     accuracy_decimals: 0
     update_interval: 30s
     lambda: return id(pet).pet().smarts();
+  - platform: template
+    name: Times table medals
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: return id(pet).pet().chant_medals();
+  - platform: template
+    name: Best chant
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: return id(pet).pet().best_score(petcore::GAME_CHANT);
 
 text_sensor:
   - platform: template
@@ -269,6 +279,23 @@ button:
 
 # The pet dims the backlight when its lights are off; a touch brightens it for 20 s.
 interval:
+  # Chant: listen while the game wants to (its mic is on, someone is there), using Home Assistant's
+  # speech-to-text. The microphone is only on during the game.
+  - interval: 250ms
+    then:
+      - lambda: |-
+          static uint32_t last_start = 0;
+          auto &p = id(pet).pet();
+          p.set_voice_link(api::global_api_server != nullptr && api::global_api_server->is_connected());
+          bool want = p.wants_listening();
+          bool running = id(va).is_running();
+          if (want && !running && millis() - last_start > 3000) {
+            id(va).request_start(true, true);  // keep listening; each pause ends a phrase
+            last_start = millis();
+          } else if (!want && running) {
+            id(va).request_stop();
+          }
+          p.set_listening(running);
   # Play the pet's tunes.
   - interval: 100ms
     then:
@@ -316,6 +343,16 @@ switch:
       - lambda: id(pet).pet().set_sound_enabled(true);
     turn_off_action:
       - lambda: id(pet).pet().set_sound_enabled(false);
+  # Chant's microphone: the same setting as the mic button in the game (saved with the pet).
+  - platform: template
+    id: chant_voice
+    name: Chant voice
+    icon: mdi:microphone
+    lambda: return id(pet).pet().voice_enabled();
+    turn_on_action:
+      - lambda: id(pet).pet().set_voice_enabled(true);
+    turn_off_action:
+      - lambda: id(pet).pet().set_voice_enabled(false);
 
 # ---- Sound: PCM5100A DAC to the 3.5 mm jack (no built-in speaker; plug in headphones or a powered speaker) ----
 i2s_audio:
@@ -323,6 +360,10 @@ i2s_audio:
     i2s_lrclk_pin: GPIO16
     i2s_bclk_pin: GPIO18
     i2s_mclk_pin: GPIO21
+  # The microphone has its own bus.
+  - id: i2s_mic_bus
+    i2s_lrclk_pin: GPIO45
+    i2s_bclk_pin: GPIO42
 
 speaker:
   - platform: i2s_audio
@@ -336,6 +377,36 @@ rtttl:
   id: beeper
   speaker: dac_speaker
   gain: 60%
+
+# ---- Microphone, for saying the times tables in Chant ----
+# The board's I2S microphone sends on the left channel. (Some JC3636W518 boards have a PDM microphone
+# instead: if Chant never hears anything, try pdm: true.)
+microphone:
+  - platform: i2s_audio
+    id: mic
+    i2s_audio_id: i2s_mic_bus
+    i2s_din_pin: GPIO46
+    adc_type: external
+    pdm: false
+    channel: left
+
+# Speech-to-text through Home Assistant's Assist pipeline (the one chosen for this device in Home Assistant).
+# Only the text matters: there is no speaker for replies.
+voice_assistant:
+  id: va
+  microphone:
+    microphone: mic
+    gain_factor: 8
+  use_wake_word: false
+  noise_suppression_level: 2
+  auto_gain: 31dBFS
+  volume_multiplier: 1.0
+  on_stt_end:
+    - lambda: id(pet).pet().voice_heard(x.c_str());
+  on_error:
+    - lambda: |-
+        ESP_LOGW("chant", "voice error %s: %s", code.c_str(), message.c_str());
+        id(pet).pet().voice_error(code.c_str());
 
 spi:
   id: display_qspi

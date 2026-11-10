@@ -93,7 +93,7 @@ and it says what it needs most ("I'm hungry!", "Clean up?", "Play with me!").
 lights off?" when the bolt gets low). In the dark the bolt fills from empty in 1 minute (2 with the light on); a
 daytime nap ends by itself when it is full, or when you turn the light back on.
 
-**Play** opens a menu of nine games; the last five are math games (times tables and division). The score sets how much happier it gets (up to +35); every game costs
+**Play** opens a menu of ten games; the last six are math games (times tables and division). The score sets how much happier it gets (up to +35); every game costs
 energy, Jump and Catch burn a little weight, and each game keeps its best score.
 
 ![games](docs/games.png)
@@ -128,6 +128,25 @@ energy, Jump and Catch burn a little weight, and each game keeps its best score.
 - **Share** (division): "18 ÷ 3 = ?" with four answers to tap, 10 questions, 20 seconds each (like Quiz, on a blue
   board). It starts with ÷2, ÷5 and ÷10. After each answer it shows the times-table fact behind it ("since 3 x 6 =
   18"), so division links back to multiplication.
+
+- **Chant** (times tables by heart, with your voice): pick a table (tap it, or say "seven"), then its twelve
+  answers sit round a circle. Tap them in order, 7, 14, 21..., or just **say them**: "seven, fourteen,
+  twenty-one" (or the whole table in one breath) and each one lights up as it is heard. The middle shows the fact
+  to come ("7 x 5 = ?") and the chant so far. It is not meant to be hard: nothing is lost for a wrong tap (that
+  bubble just wiggles), and if you get stuck the next answer glows after 4 seconds. The first time through a
+  table its answers go round in order like a clock; once you have its medal they are shuffled, so you have to
+  know what comes next.
+
+  Every table finished brings a **gift**: a box drops in, shakes and pops open. The first time it is that table's
+  **medal** (+10 coins and a little Smarts); after that a surprise treat for the pet (+3 coins). All twelve
+  medals: Times Table Champion, +50 coins. Then **AGAIN**, **NEXT** table or **DONE** (tap, or say it); Done
+  opens the prize stand like the other math games. Medals show gold on the table picker and belong to the
+  household.
+
+  **Voice** uses the board's microphone and Home Assistant's speech-to-text (Assist): see
+  [Voice for Chant](#voice-for-chant). Without it Chant works by tapping.
+
+![chant](docs/chant.png)
 
 **Times tables** (a homework helper, one swipe right from the pet) lays a table out like a clock: x1 at one
 o'clock round to x12 at twelve, so the whole table is on the screen at once. It opens by counting up: a light sweeps
@@ -260,13 +279,40 @@ output** is the DAC's soft-mute pin (GPIO48, on = sound can play).
 Pins: LRCLK 16, BCLK 18, MCLK 21, DOUT 17 (from the board's schematic, as used in
 [patrick3399/esphome_components](https://github.com/patrick3399/esphome_components/blob/main/devices/guition/jc3636w518.yaml)).
 
+## Voice for Chant
+
+The board has an I2S microphone (GPIO45 word clock, GPIO42 bit clock, GPIO46 data, left channel). While
+**Chant** is open and its mic is on, the firmware streams it to Home Assistant with ESPHome's `voice_assistant`,
+and Home Assistant's Assist pipeline turns it into text; the game reads the numbers out of that text ("7, 14",
+"seven fourteen", "a hundred and eight", and the usual mix-ups like "for" for four). The microphone is only used
+during Chant: it stops when the game closes or after 90 seconds with nothing said or tapped, and the mic button in
+the game (or the **Chant voice** switch) turns it off altogether.
+
+What it needs in Home Assistant:
+
+- **Speech-to-text** in the Assist pipeline this device uses (Settings → Voice assistants): Home Assistant Cloud,
+  or a local Whisper. (Speech-to-Phrase won't do: it only knows Home Assistant's own commands, not free
+  speech like a string of numbers.)
+- Each phrase also goes through the pipeline's conversation agent like any voice command, and the reply is
+  thrown away (the board has no speaker for it). A pipeline with the built-in **Home Assistant** agent is best:
+  numbers are not commands, so nothing happens. Avoid one whose agent is an LLM allowed to control the house. You
+  can pick the pipeline on the device's page in Home Assistant.
+
+The mic line on the Chant screen shows what is going on: **listening** (green), **mic starting**, **mic paused**
+after a voice error (it says which), **tap only** with no Home Assistant connection, or **mic off**; what it last
+heard shows underneath for a few seconds.
+
+Some JC3636W518 boards have a PDM microphone instead; if Chant never hears anything, set `pdm: true` in the
+`microphone:` section.
+
 ## Home Assistant
 
 Sensors: Food, Happiness, Energy, Cleanliness, Health, Discipline, Time together (h), Grows up in (min), Coins,
 Weight, Care mistakes, Generation, Smarts, Best jump run, Best catch, Best pop, Best copy, Best quiz, Best facts,
-Best fizz, Best munch, Best share. Text: Pet name, Species, Stage, Mood, Parent. Binary: Needs attention, Sick, Asleep, Tantrum.
+Best fizz, Best munch, Best share, Best chant, Times table medals. Text: Pet name, Species, Stage, Mood, Parent.
+Binary: Needs attention, Sick, Asleep, Tantrum.
 Buttons: Feed meal, Feed snack, Clean up, Give medicine, Toggle light, Scold, Hatch new egg.
-Switches: Sound, Audio output, and the Backlight light.
+Switches: Sound, Audio output, Chant voice (the mic in Chant), and the Backlight light.
 
 `binary_sensor.<device>_needs_attention` is the one to notify on (it includes tantrums).
 

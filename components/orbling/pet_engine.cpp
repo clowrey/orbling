@@ -1,6 +1,7 @@
 #include "pet_engine.h"
 #include "pet_art.h"
 
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -662,6 +663,10 @@ void PetEngine::hatch_new_egg(uint32_t seed, bool inherit) {
   s_.settings = old.settings;
   s_.brightness = old.brightness;
   s_.owned = old.owned;
+  s_.owned2 = old.owned2;
+  s_.owned3 = old.owned3;
+  s_.chant_medals = old.chant_medals;
+  s_.best_chant = old.best_chant;
   s_.coins = first ? 20 : old.coins;
   uint32_t last = old.last_epoch;
   s_.magic = SAVE_MAGIC;
@@ -1107,7 +1112,9 @@ void PetEngine::loop(uint32_t now) {
     } else if (run_phase_ == RUN_OVER && now - run_t_ > 4000) {
       finish_game();
     } else if (run_phase_ == RUN_GO) {
-      if (is_quiz_like(game_kind_) || game_kind_ == GAME_FACTS) {
+      if (game_kind_ == GAME_CHANT) {
+        chant_update();
+      } else if (is_quiz_like(game_kind_) || game_kind_ == GAME_FACTS) {
         math_update();
       } else if (game_kind_ == GAME_FIZZ || game_kind_ == GAME_MUNCH) {
         float left = dt / 1000.0f;
@@ -1282,6 +1289,13 @@ bool PetEngine::start_game(int kind) {
   copy_len_ = copy_idx_ = 0;
   lit_pad_ = -1;
   for (auto &o : obs_) o.active = false;
+  if (kind == GAME_CHANT) {  // no "tap to start": it opens on picking a table
+    run_phase_ = RUN_GO;
+    ch_state_ = 0;
+    ch_ok_ms_ = now_ ? now_ : 1;
+    ch_heard_[0] = 0;
+    ch_err_until_ = 0;
+  }
   return true;
 }
 
@@ -1295,6 +1309,7 @@ int PetEngine::best_score(int kind) const {
     case GAME_FIZZ: return s_.best_fizz;
     case GAME_MUNCH: return s_.best_munch;
     case GAME_SHARE: return s_.best_share;
+    case GAME_CHANT: return s_.best_chant;
     default: return s_.best_run;
   }
 }
@@ -1318,6 +1333,7 @@ void PetEngine::finish_game() {
                         : game_kind_ == GAME_FIZZ ? &s_.best_fizz
                         : game_kind_ == GAME_MUNCH ? &s_.best_munch
                         : game_kind_ == GAME_SHARE ? &s_.best_share
+                        : game_kind_ == GAME_CHANT ? &s_.best_chant
                                                   : &s_.best_run;
   bool best = sc > *best_slot;
   if (best) *best_slot = (uint16_t) sc;
@@ -1400,11 +1416,19 @@ static const uint32_t MUNCH_BANNER_MS = 2000;
 static const int QUIZ_X[4] = {125, 235, 125, 235}, QUIZ_Y[4] = {176, 176, 268, 268}, QUIZ_R = 42;
 static const uint32_t QUIZ_TIME_MS = 20000;  // per question
 
-// The game menu: three by three.
-static const int MENU_R = 36;
+// The game menu: rows of three, four and three.
+static const int MENU_R = 34;
 static void menu_pos(int i, int &x, int &y) {
-  y = 108 + (i / 3) * 80;
-  x = 98 + (i % 3) * 82;
+  if (i < 3) {
+    y = 104;
+    x = 98 + i * 82;
+  } else if (i < 7) {
+    y = 182;
+    x = 60 + (i - 3) * 80;
+  } else {
+    y = 260;
+    x = 98 + (i - 7) * 82;
+  }
 }
 // Facts keypad, as big as the round screen allows: digits in two rows of five across the wide middle (1-5,
 // 6-9 and 0), then two wide keys: delete and skip. Keys are 60x58 with 5 px gaps; a touch counts for the key
@@ -1430,6 +1454,10 @@ static void pad_center(int i, int &x, int &y) {
 
 // A finger came down during a game.
 void PetEngine::game_press(int x, int y) {
+  if (game_kind_ == GAME_CHANT) {
+    chant_press(x, y);
+    return;
+  }
   if (run_phase_ == RUN_OVER) {
     if (now_ - run_t_ > 700) finish_game();
     return;
@@ -2505,6 +2533,7 @@ void PetEngine::draw_scene(Canvas &c, uint32_t now) {
       case GAME_FACTS: draw_facts(c, now); break;
       case GAME_FIZZ: draw_fizz(c, now); break;
       case GAME_MUNCH: draw_munch(c, now); break;
+      case GAME_CHANT: draw_chant(c, now); break;
       default: draw_runner(c, now); break;
     }
     return;
@@ -2814,10 +2843,10 @@ void PetEngine::draw_games_menu(Canvas &c) {
   circle(c, 180, 180, 168, 0x2B2233);
   circle(c, 180, 180, 164, 0xFFF6E0);
   text(c, 180, 36, "PLAY", 3, 0x2B2233, true, false);
-  static const char *const NAMES[GAME_COUNT] = {"JUMP", "CATCH", "POP",   "COPY", "QUIZ",
-                                                "FACTS", "FIZZ", "MUNCH", "SHARE"};
+  static const char *const NAMES[GAME_COUNT] = {"JUMP", "CATCH", "POP",   "COPY",  "QUIZ",
+                                                "FACTS", "FIZZ", "MUNCH", "SHARE", "CHANT"};
   static const uint32_t BG[GAME_COUNT] = {0xD8F0C8, 0xFFE3B0, 0xCFE8FF, 0xF3D6FF, 0xC8F0E0,
-                                          0xFFF0B0, 0xC8F0E0, 0xFFF0B0, 0xC8E0FF};
+                                          0xFFF0B0, 0xC8F0E0, 0xFFF0B0, 0xC8E0FF, 0xFFD8E8};
   for (int i = 0; i < GAME_COUNT; i++) {
     int gx, gy;
     menu_pos(i, gx, gy);
@@ -2832,6 +2861,7 @@ void PetEngine::draw_games_menu(Canvas &c) {
       case GAME_FACTS: icon(c, art::KEYPAD, 12, gx - 12, gy - 30, 2); break;
       case GAME_FIZZ: icon(c, art::FIZZ_ICON, 12, gx - 12, gy - 30, 2); break;
       case GAME_MUNCH: icon(c, art::MUNCH_ICON, 12, gx - 12, gy - 30, 2); break;
+      case GAME_CHANT: icon(c, art::MIC, 12, gx - 12, gy - 30, 2); break;
       default: icon(c, art::DIVIDE, 12, gx - 12, gy - 30, 2); break;
     }
     text(c, gx, gy - 2, NAMES[i], 2, 0x2B2233, true, false);
@@ -3140,6 +3170,57 @@ void PetEngine::draw_facts(Canvas &c, uint32_t now) {
 
 // --- Shop: food is eaten at once; toys and hats are kept, and pass down the family. ---
 
+// What eating a food item does: bought in the shop or at the stand, or found in a Chant gift.
+void PetEngine::food_effect(int id) {
+  switch (id) {
+    case IT_CAKE:
+      add(s_.happy, 30);
+      add(s_.food, 10);
+      s_.weight = (uint8_t) (s_.weight + 2);
+      break;
+    case IT_STEAK:
+      add(s_.food, 50);
+      s_.weight++;
+      break;
+    case IT_JUICE:
+      add(s_.energy, 40);
+      add(s_.happy, 5);
+      break;
+    case IT_BRAIN_SNACK:  // blueberries: good for the brain
+      s_.smarts_x10 = (uint16_t) (s_.smarts_x10 + 20 > 1000 ? 1000 : s_.smarts_x10 + 20);
+      add(s_.happy, 10);
+      add(s_.food, 5);
+      break;
+    case IT_STAR_COOKIE:
+      s_.smarts_x10 = (uint16_t) (s_.smarts_x10 + 10 > 1000 ? 1000 : s_.smarts_x10 + 10);
+      add(s_.happy, 10);
+      break;
+    case IT_ENERGY_BAR: add(s_.energy, 30); break;
+    case IT_MILK:
+      add(s_.health, 10);
+      add(s_.food, 10);
+      break;
+    case IT_SODA: add(s_.happy, 15); break;
+    case IT_SUSHI: add(s_.food, 30); break;
+    case IT_DONUT:
+      add(s_.happy, 20);
+      s_.weight = (uint8_t) (s_.weight + 2);
+      break;
+    case IT_PIZZA:
+      add(s_.food, 40);
+      add(s_.happy, 10);
+      s_.weight++;
+      break;
+    case IT_ASTRO:
+      add(s_.happy, 20);
+      add(s_.energy, 10);
+      break;
+    default:  // candy
+      add(s_.happy, 10);
+      break;
+  }
+}
+
 bool PetEngine::buy(int id) {
   if (id < 0 || id >= IT_COUNT) return false;
   const ShopItem &it = SHOP[id];
@@ -3175,53 +3256,7 @@ bool PetEngine::buy(int id) {
   }
   s_.coins = (uint16_t) (s_.coins - it.price);
   if (food) {
-    switch (id) {
-      case IT_CAKE:
-        add(s_.happy, 30);
-        add(s_.food, 10);
-        s_.weight = (uint8_t) (s_.weight + 2);
-        break;
-      case IT_STEAK:
-        add(s_.food, 50);
-        s_.weight++;
-        break;
-      case IT_JUICE:
-        add(s_.energy, 40);
-        add(s_.happy, 5);
-        break;
-      case IT_BRAIN_SNACK:  // blueberries: good for the brain
-        s_.smarts_x10 = (uint16_t) (s_.smarts_x10 + 20 > 1000 ? 1000 : s_.smarts_x10 + 20);
-        add(s_.happy, 10);
-        add(s_.food, 5);
-        break;
-      case IT_STAR_COOKIE:
-        s_.smarts_x10 = (uint16_t) (s_.smarts_x10 + 10 > 1000 ? 1000 : s_.smarts_x10 + 10);
-        add(s_.happy, 10);
-        break;
-      case IT_ENERGY_BAR: add(s_.energy, 30); break;
-      case IT_MILK:
-        add(s_.health, 10);
-        add(s_.food, 10);
-        break;
-      case IT_SODA: add(s_.happy, 15); break;
-      case IT_SUSHI: add(s_.food, 30); break;
-      case IT_DONUT:
-        add(s_.happy, 20);
-        s_.weight = (uint8_t) (s_.weight + 2);
-        break;
-      case IT_PIZZA:
-        add(s_.food, 40);
-        add(s_.happy, 10);
-        s_.weight++;
-        break;
-      case IT_ASTRO:
-        add(s_.happy, 20);
-        add(s_.energy, 10);
-        break;
-      default:  // candy
-        add(s_.happy, 10);
-        break;
-    }
+    food_effect(id);
     sound(SND_EAT);
     if (overlay_ == OV_STAND) {  // keep the stand open
       snprintf(msg, sizeof(msg), id == IT_BRAIN_SNACK ? "Smarts +2!" : id == IT_STAR_COOKIE ? "Smarts +1!" : "Yum!");
@@ -3608,6 +3643,467 @@ void PetEngine::draw_tables(Canvas &c, uint32_t now) {
     text(c, 180, 140, buf, 8, col);
     text(c, 180, 208, "tap an answer", 2, 0x8A80B0, true, false);
     text(c, 180, 228, "drag up/down", 2, 0x8A80B0, true, false);
+  }
+}
+
+// --- Chant: the times tables by heart ---
+// Pick a table, then its twelve answers sit round a circle: tap them in order (7, 14, 21...), or say them out
+// loud. The first time they go round in order like a clock; once the table's medal is won they are shuffled, so
+// you have to know what comes next. Nothing is lost for a wrong tap, and if you get stuck the next one glows.
+// Every table done brings a gift: its medal the first time, a treat after that.
+
+static const char *const CH_NOTES[12] = {
+    "n1:d=16,o=6,b=200:c",  "n2:d=16,o=6,b=200:d",  "n3:d=16,o=6,b=200:e",  "n4:d=16,o=6,b=200:f",
+    "n5:d=16,o=6,b=200:g",  "n6:d=16,o=6,b=200:a",  "n7:d=16,o=6,b=200:b",  "n8:d=16,o=7,b=200:c",
+    "n9:d=16,o=7,b=200:d",  "n10:d=16,o=7,b=200:e", "n11:d=16,o=7,b=200:f", "n12:d=16,o=7,b=200:g"};
+static const char *const SND_GIFT = "gift:d=16,o=6,b=180:c,e,g,c7,p,g,c7";
+static const int CH_HINT_MS = 4000;      // stuck this long: the next answer glows
+static const int CH_DROP_MS = 600, CH_OPEN_MS = 1300, CH_BUTTONS_MS = 2200;  // the gift's timeline
+static const int CH_BTN_Y = 282, CH_BTN_W = 70, CH_BTN_H = 36;
+static const int CH_BTN_X[3] = {103, 180, 257};  // again, next, done
+static const int CH_MIC_Y = 214;
+// Treats a gift can hold (a medal comes first, once per table).
+static const uint8_t CH_TREATS[] = {IT_CAKE, IT_JUICE, IT_CANDY, IT_DONUT, IT_SODA, IT_ASTRO, IT_STAR_COOKIE, IT_PIZZA};
+
+static uint32_t max3(uint32_t a, uint32_t b, uint32_t c) { return a > b ? (a > c ? a : c) : (b > c ? b : c); }
+
+int PetEngine::chant_medals() const {
+  int n = 0;
+  for (int i = 0; i < 12; i++) n += (s_.chant_medals >> i) & 1;
+  return n;
+}
+
+void PetEngine::set_voice_enabled(bool on) {
+  if (on)
+    s_.settings &= (uint8_t) ~2;
+  else
+    s_.settings |= 2;
+  dirty_ = true;
+}
+
+bool PetEngine::wants_listening() const {
+  if (overlay_ != OV_GAME || game_kind_ != GAME_CHANT || !voice_enabled() || !voice_link_) return false;
+  if ((int32_t) (ch_err_until_ - now_) > 0) return false;  // a voice error: wait a bit before trying again
+  return now_ - max3(ch_ok_ms_, ch_heard_ms_, last_user_) < 90000;  // stop listening when nobody's there
+}
+
+void PetEngine::voice_error(const char *code) {
+  if (code == nullptr) return;
+  // Silence and "didn't catch that" are normal while someone thinks; only real failures pause the mic.
+  if (strstr(code, "no-text") || strstr(code, "timeout") || strstr(code, "no_text") || strstr(code, "cancel")) return;
+  ch_err_until_ = now_ + 15000;
+  snprintf(ch_heard_, sizeof(ch_heard_), "voice: %.34s", code);
+  ch_heard_ms_ = now_ ? now_ : 1;
+}
+
+// Number words to numbers. "seven fourteen twenty one" is 7, 14, 21: a new number starts whenever the next word
+// can't add to the one being built (a unit after a unit, a teen or a ten after anything but a hundred).
+int PetEngine::parse_numbers(const char *text, int *out, int max) {
+  static const char *const UNITS[] = {"zero", "one", "two",   "three", "four", "five",   "six",
+                                      "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen",
+                                      "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"};
+  static const char *const TENS[] = {"twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"};
+  struct Alias {
+    const char *word;
+    int value;
+  };
+  // Words speech-to-text writes for numbers it heard ("for" four, "ate" eight...).
+  static const Alias ALIASES[] = {{"for", 4}, {"fore", 4}, {"to", 2}, {"too", 2}, {"ate", 8},
+                                  {"won", 1}, {"fourty", 40}, {"twelfth", 12}, {"oh", 0}};
+  int n = 0, cur = -1;  // cur: the number being built, -1 none
+  auto emit = [&]() {
+    if (cur >= 0 && n < max) out[n++] = cur;
+    cur = -1;
+  };
+  const char *p = text ? text : "";
+  while (*p) {
+    if (isdigit((unsigned char) *p)) {
+      emit();
+      long v = 0;
+      while (isdigit((unsigned char) *p) || (*p == ',' && isdigit((unsigned char) p[1]) && isdigit((unsigned char) p[2]) &&
+                                             isdigit((unsigned char) p[3]) && !isdigit((unsigned char) p[4]))) {
+        if (*p != ',') v = v * 10 + (*p - '0');
+        if (v > 100000) v = 100000;
+        p++;
+      }
+      if (n < max) out[n++] = (int) v;
+      continue;
+    }
+    if (!isalpha((unsigned char) *p)) {
+      p++;
+      continue;
+    }
+    char w[16];
+    int len = 0;
+    while (isalpha((unsigned char) *p)) {
+      if (len < 15) w[len++] = (char) tolower((unsigned char) *p);
+      p++;
+    }
+    w[len] = 0;
+    int val = -1;
+    for (int i = 0; i < 20 && val < 0; i++)
+      if (!strcmp(w, UNITS[i])) val = i;
+    for (int i = 0; i < 8 && val < 0; i++)
+      if (!strcmp(w, TENS[i])) val = 20 + i * 10;
+    for (const auto &a : ALIASES)
+      if (val < 0 && !strcmp(w, a.word)) val = a.value;
+    if (!strcmp(w, "hundred")) {
+      if (cur < 0)
+        cur = 100;  // "a hundred", "hundred"
+      else if (cur >= 1 && cur <= 9)
+        cur *= 100;
+      else {
+        emit();
+        cur = 100;
+      }
+      continue;
+    }
+    if (val < 0) {
+      // "and" or "a" inside "a hundred and eight" keeps the number going; any other word ends it.
+      if (!strcmp(w, "and") || !strcmp(w, "a")) continue;
+      emit();
+      continue;
+    }
+    if (cur < 0) {
+      cur = val;
+    } else if (val < 10 && cur >= 20 && cur % 10 == 0 && cur % 100 != 10) {
+      cur += val;  // twenty one, a hundred and six
+    } else if (val < 100 && cur >= 100 && cur % 100 == 0) {
+      cur += val;  // a hundred and twelve, one hundred twenty
+    } else if (val < 10 && cur >= 100 && cur % 10 == 0 && cur % 100 >= 20) {
+      cur += val;  // one hundred twenty one
+    } else {
+      emit();
+      cur = val;
+    }
+  }
+  emit();
+  return n;
+}
+
+void PetEngine::voice_heard(const char *text) {
+  if (text == nullptr) return;
+  snprintf(ch_heard_, sizeof(ch_heard_), "%s", text);
+  if (strlen(text) >= sizeof(ch_heard_)) strcpy(ch_heard_ + sizeof(ch_heard_) - 4, "...");
+  ch_heard_ms_ = now_ ? now_ : 1;
+  if (overlay_ != OV_GAME || game_kind_ != GAME_CHANT) return;
+  last_user_ = ch_heard_ms_;  // someone is talking to it: it is not alone
+  char low[64];
+  snprintf(low, sizeof(low), "%s", text);
+  for (char *q = low; *q; q++) *q = (char) tolower((unsigned char) *q);
+  int nums[24];
+  int count = parse_numbers(text, nums, 24);
+  if (ch_state_ == 0) {  // "seven" (or "the seven times table") picks a table
+    for (int i = 0; i < count; i++)
+      if (nums[i] >= 1 && nums[i] <= 12) {
+        chant_begin(nums[i]);
+        return;
+      }
+    return;
+  }
+  if (ch_state_ == 2) {
+    if (now_ - ch_gift_ms_ < (uint32_t) CH_OPEN_MS) return;
+    if (strstr(low, "again"))
+      chant_begin(ch_table_);
+    else if (strstr(low, "next"))
+      chant_begin(ch_table_ % 12 + 1);
+    else if (strstr(low, "done") || strstr(low, "stop"))
+      finish_game();
+    return;
+  }
+  // Chanting: every number that is the next answer counts; anything else ("seven times three is...") is ignored.
+  for (int i = 0; i < count && ch_state_ == 1; i++)
+    if (ch_next_ < 12 && nums[i] == ch_table_ * (ch_next_ + 1)) chant_hit(ch_next_ + 1);
+}
+
+void PetEngine::chant_begin(int table) {
+  ch_table_ = (uint8_t) table;
+  ch_next_ = 0;
+  ch_state_ = 1;
+  ch_ok_ms_ = now_ ? now_ : 1;
+  ch_wrong_ = -1;
+  for (int k = 0; k < 12; k++) ch_slot_[k] = (uint8_t) (k + 1);
+  if (s_.chant_medals & (1u << (table - 1))) {  // learnt once: shuffle, so the next one has to be remembered
+    for (int k = 11; k > 0; k--) {
+      int j = (int) (rnd() % (uint32_t) (k + 1));
+      uint8_t t = ch_slot_[k];
+      ch_slot_[k] = ch_slot_[j];
+      ch_slot_[j] = t;
+    }
+  }
+}
+
+void PetEngine::chant_hit(int k) {
+  ch_next_ = (uint8_t) k;
+  ch_ok_ms_ = now_ ? now_ : 1;
+  ch_wrong_ = -1;
+  sound(CH_NOTES[k - 1]);
+  if (k == 12) chant_complete();
+}
+
+void PetEngine::chant_complete() {
+  ch_state_ = 2;
+  ch_gift_ms_ = now_ ? now_ : 1;
+  if (run_score_ < 65535) run_score_++;
+  uint16_t bit = (uint16_t) (1u << (ch_table_ - 1));
+  bool medal = !(s_.chant_medals & bit);
+  ch_champion_ = false;
+  int coins;
+  if (medal) {
+    s_.chant_medals |= bit;
+    ch_gift_item_ = -1;
+    coins = 10;
+    for (int i = 0; i < 3; i++) learn();
+    if ((s_.chant_medals & 0xFFF) == 0xFFF) {  // that was the last one
+      ch_champion_ = true;
+      coins += 50;
+    }
+  } else {
+    ch_gift_item_ = (int8_t) CH_TREATS[rnd() % (sizeof(CH_TREATS) / sizeof(CH_TREATS[0]))];
+    food_effect(ch_gift_item_);
+    coins = 3;
+    learn();
+  }
+  ch_gift_coins_ = (uint8_t) coins;
+  s_.coins = (uint16_t) (s_.coins + coins > 9999 ? 9999 : s_.coins + coins);
+  add(s_.happy, 10);
+  sound(SND_GIFT, true);
+  dirty_ = true;
+}
+
+void PetEngine::chant_update() {
+  uint32_t idle = now_ - max3(ch_ok_ms_, ch_heard_ms_, last_user_);
+  if (ch_state_ == 0 && idle > 60000) overlay_ = OV_NONE;  // never picked a table
+  else if (idle > 300000) finish_game();                    // left alone for five minutes
+}
+
+void PetEngine::chant_press(int x, int y) {
+  if (ch_state_ != 2 && abs(x - 180) < 70 && abs(y - (CH_MIC_Y + 14)) < 22) {
+    set_voice_enabled(!voice_enabled());
+    show_toast(voice_enabled() ? "Mic on" : "Mic off", 1200);
+    return;
+  }
+  if (ch_state_ == 0) {
+    for (int k = 1; k <= 12; k++) {
+      int bx, by;
+      tt_pos((float) k, bx, by);
+      if (sq(x - bx) + sq(y - by) < (TT_BR + 8) * (TT_BR + 8)) {
+        chant_begin(k);
+        return;
+      }
+    }
+    return;
+  }
+  if (ch_state_ == 1) {
+    for (int k = 1; k <= 12; k++) {
+      int bx, by;
+      tt_pos((float) ch_slot_[k - 1], bx, by);
+      if (sq(x - bx) + sq(y - by) >= (TT_BR + 8) * (TT_BR + 8)) continue;
+      if (k == ch_next_ + 1) {
+        chant_hit(k);
+      } else if (k > ch_next_) {  // not yet: a little wiggle, nothing lost
+        ch_wrong_ = (int8_t) k;
+        ch_wrong_ms_ = now_ ? now_ : 1;
+        sound(SND_KEY);
+      }
+      return;
+    }
+    return;
+  }
+  // The gift: again, next table, or done.
+  if (now_ - ch_gift_ms_ < (uint32_t) CH_BUTTONS_MS) return;
+  for (int b = 0; b < 3; b++) {
+    if (abs(x - CH_BTN_X[b]) > CH_BTN_W / 2 + 4 || abs(y - CH_BTN_Y) > CH_BTN_H / 2 + 6) continue;
+    if (b == 0)
+      chant_begin(ch_table_);
+    else if (b == 1)
+      chant_begin(ch_table_ % 12 + 1);
+    else
+      finish_game();
+    return;
+  }
+}
+
+// The mic and what it heard, under the middle of the Chant screens.
+void PetEngine::draw_mic_status(Canvas &c, uint32_t now, int y) {
+  bool on = voice_enabled(), want = wants_listening();
+  bool err = (int32_t) (ch_err_until_ - now) > 0;
+  const char *label;
+  uint32_t col = 0x8A80B0;
+  if (!on) {
+    label = "mic off";
+  } else if (!voice_link_) {
+    label = "tap only";  // no Home Assistant connection: no speech-to-text
+  } else if (err) {
+    label = "mic paused";
+    col = 0xFF9A3C;
+  } else if (want && listening_) {
+    label = "listening";
+    col = 0x7CFF8A;
+  } else if (want) {
+    label = "mic starting";
+  } else {
+    label = "tap mic";
+  }
+  int w = 24 + 6 + (int) strlen(label) * 12;
+  int x0 = 180 - w / 2;
+  if (on && voice_link_ && want && listening_) {
+    int r = 15 + (int) (2 * sinf(now / 160.0f));
+    circle(c, x0 + 12, y + 12, r, 0x1F4A2E);
+  }
+  icon(c, art::MIC, 12, x0, y, 2, 99, !(on && voice_link_));
+  text(c, x0 + 30, y + 6, label, 2, col, false, false);
+  if (ch_heard_[0] && now - ch_heard_ms_ < 6000) {
+    char buf[30];
+    snprintf(buf, sizeof(buf), "\"%.24s\"", ch_heard_);
+    text(c, 180, y + 32, buf, 1, 0xC9C2E8, true, false);
+  }
+}
+
+void PetEngine::draw_chant(Canvas &c, uint32_t now) {
+  rect(c, 0, 0, SCREEN, SCREEN, 0x16122A);
+  circle(c, 180, 180, TT_R + TT_BR + 6, 0x221B3A);
+  circle(c, 180, 180, TT_INNER + 2, 0x16122A);
+  char buf[48];
+
+  if (ch_state_ == 0) {  // pick a table; tables with a medal are gold
+    for (int k = 1; k <= 12; k++) {
+      int bx, by;
+      tt_pos((float) k, bx, by);
+      bool medal = s_.chant_medals & (1u << (k - 1));
+      circle(c, bx, by, TT_BR + 2, 0x1A1426);
+      circle(c, bx, by, TT_BR, medal ? 0xFFD23F : TT_COLORS[k - 1]);
+      snprintf(buf, sizeof(buf), "%d", k);
+      text(c, bx, by - 10, buf, 3, medal ? 0x2B2233 : 0xFFFFFF, true, !medal);
+      if (medal) {  // a little rosette
+        circle(c, bx + 15, by - 15, 5, 0xFFFFFF);
+        circle(c, bx + 15, by - 15, 3, 0xF0454B);
+      }
+    }
+    text(c, 180, 90, "CHANT", 3, 0xFFFFFF);
+    text(c, 180, 124, "pick a table", 2, 0xC9C2E8, true, false);
+    text(c, 180, 144, "say or tap it", 2, 0x8A80B0, true, false);
+    snprintf(buf, sizeof(buf), "medals %d/12", chant_medals());
+    text(c, 180, 176, buf, 2, 0xFFD23F, true, false);
+    draw_mic_status(c, now, CH_MIC_Y);
+    return;
+  }
+
+  const int n = ch_table_;
+  const uint32_t col = TT_COLORS[(n - 1) % 12];
+  bool gift = ch_state_ == 2;
+  if (gift) {  // a party ring of sparkles turning slowly round the gift, instead of the answers
+    static const uint32_t SPARK_RING[3] = {0xFFD23F, 0xFFFFFF, 0xFF9A3C};
+    for (int i = 0; i < 18; i++) {
+      float a = i * 0.349f + now / 2400.0f;
+      int r = 4 + (int) (2 * (1 + sinf(now / 200.0f + i)));
+      circle(c, 180 + (int) (155 * cosf(a)), 180 + (int) (155 * sinf(a)), r, i % 3 == 2 ? col : SPARK_RING[i % 3]);
+    }
+  }
+  for (int k = 1; k <= 12 && !gift; k++) {
+    int bx, by;
+    tt_pos((float) ch_slot_[k - 1], bx, by);
+    bool done = k <= ch_next_;
+    int r = TT_BR;
+    if (done && k == ch_next_ && now - ch_ok_ms_ < 250) r = (int) lroundf(TT_BR * (1.0f + 0.3f * sinf(3.14159265f * (now - ch_ok_ms_) / 250.0f)));
+    if (k == ch_wrong_ && now - ch_wrong_ms_ < 320) bx += (int) (5 * sinf((now - ch_wrong_ms_) / 25.0f));
+    bool hint = !gift && k == ch_next_ + 1 && now - ch_ok_ms_ > (uint32_t) CH_HINT_MS;
+    if (hint) circle(c, bx, by, r + 5 + (int) (3 * (1 + sinf(now / 150.0f))), mix(0x221B3A, col, 0.8f));
+    circle(c, bx, by, r + 2, 0x1A1426);
+    circle(c, bx, by, r, done ? col : 0xFFF6E0);
+    snprintf(buf, sizeof(buf), "%d", n * k);
+    text(c, bx, by - 7, buf, 2, done ? 0xFFFFFF : 0x2B2233, true, done);
+  }
+
+  if (!gift) {
+    snprintf(buf, sizeof(buf), "TIMES %d", n);
+    text(c, 180, 92, buf, 2, 0xC9C2E8, true, false);
+    snprintf(buf, sizeof(buf), "%d x %d = ?", n, ch_next_ + 1);
+    text(c, 180, 116, buf, 3, 0xFFFFFF);
+    // The chant so far: the last few answers, then the one to come.
+    int first = ch_next_ > 4 ? ch_next_ - 3 : 1;
+    int len = 0;
+    buf[0] = 0;
+    for (int k = first; k <= ch_next_; k++) len += snprintf(buf + len, sizeof(buf) - len, "%d ", n * k);
+    snprintf(buf + len, sizeof(buf) - len, "?");
+    text(c, 180, 152, buf, 2, col, true, false);
+    snprintf(buf, sizeof(buf), "%d of 12", ch_next_);
+    text(c, 180, 180, buf, 2, 0x8A80B0, true, false);
+    draw_mic_status(c, now, CH_MIC_Y);
+    return;
+  }
+
+  // The gift: a box drops in, shakes, pops open, and out comes the medal or a treat.
+  uint32_t t = now - ch_gift_ms_;
+  circle(c, 180, 180, TT_INNER + 2, 0x16122A);
+  int bx = 180, by = 150;
+  if (t < (uint32_t) CH_DROP_MS) {
+    float f = 1.0f - t / (float) CH_DROP_MS;
+    by -= (int) (f * f * 130);
+  } else if (t < (uint32_t) CH_OPEN_MS) {
+    bx += (int) (4 * sinf(t / 30.0f));
+  }
+  bool open = t >= (uint32_t) CH_OPEN_MS;
+  // box
+  rect(c, bx - 34, by - 10, 68, 48, 0x2B2233);
+  rect(c, bx - 31, by - 7, 62, 42, 0xF0454B);
+  rect(c, bx - 31, by + 22, 62, 13, 0xC2333A);
+  rect(c, bx - 6, by - 7, 12, 42, 0xFFD23F);
+  if (!open) {  // lid and bow
+    rect(c, bx - 38, by - 24, 76, 16, 0x2B2233);
+    rect(c, bx - 35, by - 21, 70, 10, 0xFF6B70);
+    rect(c, bx - 6, by - 21, 12, 10, 0xFFD23F);
+    circle(c, bx - 10, by - 30, 8, 0xFFD23F);
+    circle(c, bx + 10, by - 30, 8, 0xFFD23F);
+    circle(c, bx, by - 27, 4, 0xE0A800);
+  } else {
+    uint32_t to = t - CH_OPEN_MS;
+    if (to < 500) {  // the lid flies off
+      int ly = by - 24 - (int) (to * 0.25f), lx = bx + (int) (to * 0.12f);
+      rect(c, lx - 38, ly, 76, 16, 0x2B2233);
+      rect(c, lx - 35, ly + 3, 70, 10, 0xFF6B70);
+    }
+    if (to < 700) {  // sparkles
+      for (int i = 0; i < 10; i++) {
+        float a = i * 0.628f, d = 10 + to * 0.12f;
+        static const uint32_t SPARK[3] = {0xFFD23F, 0xFFFFFF, 0x7CC8FF};
+        circle(c, bx + (int) (cosf(a) * d), by - 20 + (int) (sinf(a) * d * 0.8f), 3, SPARK[i % 3]);
+      }
+    }
+    int rise = to < 300 ? (int) (to * 0.1f) : 30;
+    int iy = by - 24 - rise;
+    if (ch_gift_item_ < 0) {  // the medal: ribbon, gold disc, the table's number
+      rect(c, bx - 14, iy - 30, 10, 22, 0x4AA8FF);
+      rect(c, bx + 4, iy - 30, 10, 22, 0xF0454B);
+      circle(c, bx, iy, 24, 0x2B2233);
+      circle(c, bx, iy, 22, 0xFFD23F);
+      circle(c, bx, iy, 17, 0xFFE680);
+      snprintf(buf, sizeof(buf), "%d", n);
+      text(c, bx, iy - 10, buf, 3, 0x2B2233, true, false);
+    } else {
+      const ShopItem &it = SHOP[ch_gift_item_];
+      icon(c, it.icon, it.rows, bx - 24, iy - 24, 4);
+    }
+  }
+  if (t >= (uint32_t) CH_OPEN_MS + 200) {
+    if (ch_gift_item_ < 0)
+      snprintf(buf, sizeof(buf), "Medal for the %ds!", n);
+    else
+      snprintf(buf, sizeof(buf), "Gift: %s!", SHOP[ch_gift_item_].name);
+    text(c, 180, 202, buf, 2, 0xFFFFFF);
+    snprintf(buf, sizeof(buf), "+%d coins", ch_gift_coins_);
+    text(c, 180, 224, buf, 2, 0xFFD23F);
+    if (ch_champion_) text(c, 180, 248, "ALL 12: TIMES TABLE CHAMPION!", 1, 0x7CFF8A, true, false);
+  }
+  if (t >= (uint32_t) CH_BUTTONS_MS) {
+    static const char *const LABELS[3] = {"AGAIN", "NEXT", "DONE"};
+    static const uint32_t BTN_COL[3] = {0x4AA8FF, 0x5BD46B, 0x8A80B0};
+    for (int b = 0; b < 3; b++) {
+      int x = CH_BTN_X[b];
+      rect(c, x - CH_BTN_W / 2 - 2, CH_BTN_Y - CH_BTN_H / 2 - 2, CH_BTN_W + 4, CH_BTN_H + 4, 0x1A1426);
+      rect(c, x - CH_BTN_W / 2, CH_BTN_Y - CH_BTN_H / 2, CH_BTN_W, CH_BTN_H, BTN_COL[b]);
+      text(c, x, CH_BTN_Y - 7, LABELS[b], 2, 0xFFFFFF, true, true);
+    }
   }
 }
 

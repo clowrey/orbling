@@ -130,6 +130,10 @@ static const char *const KEYPAD[12] = {
     "KKKKKKKKKKKK", "KLLLLLLLLLLK", "KKKKKKKKKKKK", "KWWWKWWWKWWK", "KWWWKWWWKWWK", "KKKKKKKKKKKK",
     "KWWWKWWWKWWK", "KWWWKWWWKWWK", "KKKKKKKKKKKK", "KWWWKWWWKGGK", "KWWWKWWWKGGK", "KKKKKKKKKKKK",
 };
+static const char *const MIC[12] = {
+    "....KKKK....", "...KLLLLK...", "...KLWLLK...", "...KLLLLK...", "...KLLLLK...", "...KLLLLK...",
+    ".K.KLLLLK.K.", ".K..KKKK..K.", "..K......K..", "...KKKKKK...", ".....KK.....", "...KKKKKK...",
+};
 
 // --- math prizes and smarts ---
 static const char *const MINI_BOOK[7] = {"KKKKKKK", "KLLKWWK", "KLLKWWK", "KLLKWWK", "KLLKWWK", "KKKKKKK", "......."};

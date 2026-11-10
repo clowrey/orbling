@@ -133,9 +133,8 @@ energy, Jump and Catch burn a little weight, and each game keeps its best score.
   answers sit round a circle. Tap them in order, 7, 14, 21..., or just **say them**: "seven, fourteen,
   twenty-one" (or the whole table in one breath) and each one lights up as it is heard. The middle shows the fact
   to come ("7 x 5 = ?") and the chant so far. It is not meant to be hard: nothing is lost for a wrong tap (that
-  bubble just wiggles), and if you get stuck the next answer glows after 4 seconds. The first time through a
-  table its answers go round in order like a clock; once you have its medal they are shuffled, so you have to
-  know what comes next.
+  bubble just wiggles), and if you get stuck the next answer glows after 4 seconds. The answers always go round in order like a clock; the **HARD** switch on the table picker shuffles them, so you
+  have to know what comes next. **BACK** (while chanting) returns to the picker and **EXIT** leaves the game.
 
   Every table finished brings a **gift**: a box drops in, shakes and pops open. The first time it is that table's
   **medal** (+10 coins and a little Smarts); after that a surprise treat for the pet (+3 coins). All twelve

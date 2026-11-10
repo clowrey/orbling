@@ -3663,6 +3663,7 @@ static const int CH_DROP_MS = 600, CH_OPEN_MS = 1300, CH_BUTTONS_MS = 2200;  // 
 static const int CH_BTN_Y = 282, CH_BTN_W = 70, CH_BTN_H = 36;
 static const int CH_BTN_X[3] = {103, 180, 257};  // again, next, done
 static const int CH_MIC_Y = 214;
+static const int CH_QUIT_Y = 272, CH_HARD_Y = 150;  // the exit / back pill, and the hard switch on the picker
 // Treats a gift can hold (a medal comes first, once per table).
 static const uint8_t CH_TREATS[] = {IT_CAKE, IT_JUICE, IT_CANDY, IT_DONUT, IT_SODA, IT_ASTRO, IT_STAR_COOKIE, IT_PIZZA};
 
@@ -3828,7 +3829,7 @@ void PetEngine::chant_begin(int table) {
   ch_ok_ms_ = now_ ? now_ : 1;
   ch_wrong_ = -1;
   for (int k = 0; k < 12; k++) ch_slot_[k] = (uint8_t) (k + 1);
-  if (s_.chant_medals & (1u << (table - 1))) {  // learnt once: shuffle, so the next one has to be remembered
+  if (ch_hard_) {  // hard: shuffled, so the next one has to be remembered
     for (int k = 11; k > 0; k--) {
       int j = (int) (rnd() % (uint32_t) (k + 1));
       uint8_t t = ch_slot_[k];
@@ -3889,7 +3890,22 @@ void PetEngine::chant_press(int x, int y) {
     show_toast(voice_enabled() ? "Mic on" : "Mic off", 1200);
     return;
   }
+  if (ch_state_ != 2 && abs(x - 180) < 48 && abs(y - CH_QUIT_Y) < 20) {
+    if (ch_state_ == 1) {  // back to the table picker
+      ch_state_ = 0;
+      ch_epoch_++;
+    } else if (run_score_ > 0) {
+      finish_game();  // tables were done: coins and the prize stand
+    } else {
+      overlay_ = OV_NONE;
+    }
+    return;
+  }
   if (ch_state_ == 0) {
+    if (abs(x - 180) < 70 && abs(y - CH_HARD_Y) < 17) {
+      ch_hard_ = !ch_hard_;
+      return;
+    }
     for (int k = 1; k <= 12; k++) {
       int bx, by;
       tt_pos((float) k, bx, by);
@@ -3989,12 +4005,18 @@ void PetEngine::draw_chant(Canvas &c, uint32_t now) {
         circle(c, bx + 15, by - 15, 3, 0xF0454B);
       }
     }
-    text(c, 180, 90, "CHANT", 3, 0xFFFFFF);
-    text(c, 180, 124, "pick a table", 2, 0xC9C2E8, true, false);
-    text(c, 180, 144, "then say it!", 2, 0x8A80B0, true, false);
+    text(c, 180, 84, ch_hard_ ? "CHANT HARD" : "CHANT", 3, 0xFFFFFF);
+    text(c, 180, 114, "pick a table", 2, 0xC9C2E8, true, false);
+    // The hard switch: answers in order (off) or shuffled round the circle (on).
+    rect(c, 180 - 62, CH_HARD_Y - 13, 124, 26, 0x1A1426);
+    rect(c, 180 - 60, CH_HARD_Y - 11, 120, 22, ch_hard_ ? 0xF0454B : 0x3D3350);
+    text(c, 180, CH_HARD_Y - 7, ch_hard_ ? "HARD: ON" : "HARD: OFF", 2, 0xFFFFFF, true, false);
     snprintf(buf, sizeof(buf), "medals %d/12", chant_medals());
-    text(c, 180, 176, buf, 2, 0xFFD23F, true, false);
+    text(c, 180, 180, buf, 2, 0xFFD23F, true, false);
     draw_mic_status(c, now, CH_MIC_Y);
+    rect(c, 180 - 40, CH_QUIT_Y - 13, 80, 26, 0x1A1426);
+    rect(c, 180 - 38, CH_QUIT_Y - 11, 76, 22, 0x8A80B0);
+    text(c, 180, CH_QUIT_Y - 7, "EXIT", 2, 0xFFFFFF, true, false);
     return;
   }
 
@@ -4039,6 +4061,9 @@ void PetEngine::draw_chant(Canvas &c, uint32_t now) {
     snprintf(buf, sizeof(buf), "%d of 12", ch_next_);
     text(c, 180, 180, buf, 2, 0x8A80B0, true, false);
     draw_mic_status(c, now, CH_MIC_Y);
+    rect(c, 180 - 40, CH_QUIT_Y - 13, 80, 26, 0x1A1426);
+    rect(c, 180 - 38, CH_QUIT_Y - 11, 76, 22, 0x8A80B0);
+    text(c, 180, CH_QUIT_Y - 7, "BACK", 2, 0xFFFFFF, true, false);
     return;
   }
 

@@ -439,6 +439,7 @@ class PetEngine {
   int8_t ch_wrong_{-1};       // the answer that was tapped out of turn (it wiggles)
   int8_t ch_gift_item_{-1};   // a treat in the gift, or -1 for the table's medal
   uint8_t ch_epoch_{0};
+  bool ch_hard_{false};       // Chant hard: the answers are shuffled round the circle
   bool ch_champion_{false};   // this gift completed all twelve medals
   uint8_t ch_gift_coins_{0};
   uint32_t ch_wrong_ms_{0}, ch_ok_ms_{0}, ch_gift_ms_{0}, ch_heard_ms_{0}, ch_err_until_{0};

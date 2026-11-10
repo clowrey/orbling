@@ -805,7 +805,11 @@ int main(int argc, char **argv) {
       printf("chant: no 7 medal\n");
       abort();
     }
-    tap(e, 103, 282, now);  // AGAIN: now with a medal, so shuffled
+    tap(e, 257, 282, now);  // DONE, then back in with HARD on: shuffled
+    e.start_game(GAME_CHANT);
+    tap(e, 180, 150, now);  // the hard switch
+    shot(e, "22f0-chant-hard-pick", now);
+    e.voice_heard("seven");
     now += 400;
     e.loop(now);
     shot(e, "22f-chant-shuffled", now);

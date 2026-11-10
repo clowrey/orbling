@@ -74,7 +74,7 @@ Assistant it takes the time and time zone from there. Without Home Assistant it 
 | Buttons, left to right | Feed (meal or snack), Play (game menu), Clean, Light (off = nap, on = wake), Medicine, Scold |
 | Tap the pet | Pat it (happiness) |
 | Tap the gauges at the top | Stats page |
-| Swipe left / right | Pet → stats → shop → settings pages; tap the stats page to go back |
+| Swipe left / right | Pet → stats → shop → settings → times tables pages (the times tables are also one swipe right from the pet); tap the stats page to go back |
 | Shop page | Coins at the top; tabs for food, toys and hats; tap an item twice to buy it, tap an owned hat to wear it |
 | Settings page | Sound on/off, brightness (4 levels), **New egg** (hold 2 s; replaces the pet) |
 | Hold anywhere after it is gone | Hatch a new egg |
@@ -128,6 +128,16 @@ energy, Jump and Catch burn a little weight, and each game keeps its best score.
 - **Share** (division): "18 ÷ 3 = ?" with four answers to tap, 10 questions, 20 seconds each (like Quiz, on a blue
   board). It starts with ÷2, ÷5 and ÷10. After each answer it shows the times-table fact behind it ("since 3 x 6 =
   18"), so division links back to multiplication.
+
+**Times tables** (a homework helper, one swipe right from the pet) lays a table out like a clock: x1 at one
+o'clock round to x12 at twelve, so the whole table is on the screen at once. It opens by counting up: a light sweeps
+round the ring and each answer pops in while the middle counts 7, 14, 21... Swipe up or down (or tap the small
+arrows) for the next or previous table, 1 to 12. Tap an answer to see that fact in the middle with a picture of it:
+7 x 8 shows 8 rows of 7 dots, with a gap every five to make counting easy. Changing table keeps the picked fact
+(7 x 8 becomes 8 x 8). Tap the middle to go back to the table, and again to count it up again. It is not a game:
+no coins or Smarts.
+
+![times tables](docs/tables.png)
 
 The math games are worth more: 1 coin per right answer, and less tiring than the others. Every right answer
 also raises **Smarts**.

@@ -426,6 +426,36 @@ static void fuzz(PetEngine &e) {
   }
 }
 
+// Random touches on the pages (not in a game), drawing into a canvas that checks every rectangle is on the screen.
+static void fuzz_pages(PetEngine &e) {
+  struct Checked : Canvas {
+    void fill(int x, int y, int w, int h, uint32_t) override {
+      if (x < 0 || y < 0 || w < 0 || h < 0 || x + w > SCREEN || y + h > SCREEN) {
+        printf("off-screen fill %d,%d %dx%d\n", x, y, w, h);
+        abort();
+      }
+    }
+  } cc;
+  uint32_t r = 777, now = 900000;
+  auto rnd = [&]() {
+    r = r * 1103515245u + 12345u;
+    return r >> 8;
+  };
+  for (int i = 0; i < 200000; i++) {
+    now += 5 + rnd() % 60;
+    e.loop(now);
+    int x = (int) (rnd() % 400) - 20, y = (int) (rnd() % 400) - 20;
+    switch (rnd() % 5) {
+      case 0: e.touch_down(x, y, now); break;
+      case 1: e.touch_move(x, y); break;
+      case 2: e.touch_up(now); break;
+      default: break;
+    }
+    if (e.in_game() || e.in_stand()) continue;  // the games have their own fuzz
+    if (i % 7 == 0) e.render(cc, now);
+  }
+}
+
 // Half-size thumbnails of the shots whose names start with `prefix` (all of them for "").
 static void contact_sheet(const char *name, int cols, const char *prefix = "") {
   std::vector<const std::vector<uint32_t> *> pick;
@@ -642,6 +672,39 @@ int main(int argc, char **argv) {
   e.touch_up(now);
   e.loop(now);
 
+  // Times tables: one more swipe left (or one right from the pet). The page opens counting up the table.
+  auto swipe = [&](int x0, int y0, int x1, int y1) {
+    e.touch_down(x0, y0, now);
+    e.touch_move(x1, y1);
+    now += 200;
+    e.touch_up(now);
+    e.loop(now);
+  };
+  auto ring_xy = [](int k, int &x, int &y) {
+    x = 180 + (int) lroundf(142 * sinf(k * 3.14159265f / 6));
+    y = 180 - (int) lroundf(142 * cosf(k * 3.14159265f / 6));
+  };
+  int rx, ry;
+  swipe(300, 180, 120, 185);
+  for (int i = 0; i < 5; i++) swipe(180, 250, 180, 140);  // up five times: the 7 times table
+  now += 4 * 160 + 60;
+  e.loop(now);
+  shot(e, "21a-tables-counting", now);
+  now += 3000;
+  e.loop(now);
+  shot(e, "21b-tables", now);
+  ring_xy(8, rx, ry);
+  tap(e, rx, ry, now);  // pick 7 x 8
+  now += 1500;
+  e.loop(now);
+  shot(e, "21c-tables-7x8", now);
+  for (int i = 0; i < 5; i++) swipe(180, 250, 180, 140);  // on to 12, keeping the picked x8
+  ring_xy(12, rx, ry);
+  tap(e, rx, ry, now);  // pick x12: the biggest picture
+  now += 1500;
+  e.loop(now);
+  shot(e, "21d-tables-12x12", now);
+
   prep(e, 31, STAGE_ADULT);
   e.state().dead = 1;
   shot(e, "17-gone", now);
@@ -685,6 +748,7 @@ int main(int argc, char **argv) {
               shots.end());
 
   contact_sheet("screens", 4);
+  contact_sheet("tables", 4, "21");
   contact_sheet("games", 4, "12");
   contact_sheet("math", 4, "12f");
   {
@@ -762,6 +826,9 @@ int main(int argc, char **argv) {
   prep(e, 4, STAGE_ADULT);
   fuzz(e);
   printf("\nfuzz: ok\n");
+  prep(e, 5, STAGE_ADULT);
+  fuzz_pages(e);
+  printf("fuzz pages: ok\n");
 
   printf("\nRules, simulated:\n");
   simulate("30 min at 18:00", {{18 * 60, 30}}, 16);

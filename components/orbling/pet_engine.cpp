@@ -1158,6 +1158,7 @@ void PetEngine::loop(uint32_t now) {
 
 int PetEngine::wanted_fps() const {
   if (overlay_ == OV_GAME) return 25;
+  if (page_ == PAGE_TABLES && tables_animating(now_)) return 25;
   if (!s_.lights_on && !pressed_ && (now_ - last_user_ > 20000 || last_user_ == 0)) return 2;
   if (is_dozing(now_) && !pressed_) return 4;
   return 15;
@@ -2141,7 +2142,12 @@ void PetEngine::touch_up(uint32_t now) {
   }
   int dx = tx_ - tx0_, dy = ty_ - ty0_;
   if (abs(dx) > 70 && abs(dx) > abs(dy) && overlay_ == OV_NONE) {
-    page_ = (uint8_t) ((page_ + (dx < 0 ? 1 : 3)) % 4);  // pet, stats, shop, settings
+    page_ = (uint8_t) ((page_ + (dx < 0 ? 1 : PAGE_COUNT - 1)) % PAGE_COUNT);
+    if (page_ == PAGE_TABLES) tables_start_sweep();
+    return;
+  }
+  if (page_ == PAGE_TABLES && abs(dy) > 50 && abs(dy) > abs(dx)) {  // up: next table, down: previous
+    tables_step(dy < 0 ? 1 : -1);
     return;
   }
   if (!long_fired_) tap(tx0_, ty0_);
@@ -2184,6 +2190,10 @@ void PetEngine::next_hat() {
 }
 
 void PetEngine::tap(int x, int y) {
+  if (page_ == PAGE_TABLES) {
+    tables_tap(x, y);
+    return;
+  }
   if (page_ == 3) {
     settings_tap(x, y);
     return;
@@ -2379,6 +2389,7 @@ void PetEngine::render(Canvas &c, uint32_t now) {
     case 1: draw_stats(c); break;
     case 2: draw_shop(c, now); break;
     case 3: draw_settings(c, now); break;
+    case PAGE_TABLES: draw_tables(c, now); break;
     default: draw_scene(c, now); break;
   }
   g_dim = 1.0f;
@@ -2392,7 +2403,8 @@ void PetEngine::render(Canvas &c, uint32_t now) {
 }
 
 void PetEngine::draw_page_dots(Canvas &c) {
-  for (int i = 0; i < 4; i++) circle(c, 162 + i * 12, 349, 3, i == page_ ? 0xFFFFFF : 0x6A6480);
+  for (int i = 0; i < PAGE_COUNT; i++)
+    circle(c, 180 - (PAGE_COUNT - 1) * 6 + i * 12, 349, 3, i == page_ ? 0xFFFFFF : 0x6A6480);
 }
 
 void PetEngine::draw_sky(Canvas &c, uint32_t now) {
@@ -3418,6 +3430,179 @@ void PetEngine::draw_stand(Canvas &c, uint32_t now) {
   rect(c, 180 - 60, STAND_DONE_Y - 15, 120, 30, dark);
   rect(c, 180 - 57, STAND_DONE_Y - 12, 114, 24, 0xFFF6E0);
   text(c, 180, STAND_DONE_Y - 7, "Done", 2, 0x2B2233, true, false);
+}
+
+// --- Times-table page ---
+// The table laid out like a clock: x1 at one o'clock round to x12 at twelve, so the whole table is on the screen
+// at once. Opening the page (or a new table) sweeps a light round the ring and counts up as each answer pops in.
+// Tapping an answer shows the fact in the middle with a picture of it: that many rows of dots.
+
+static const int TT_R = 142, TT_BR = 23;  // ring radius and answer-bubble radius
+static const int TT_STEP_MS = 160;         // sweep time per answer
+static const int TT_INNER = 112;           // middle area radius
+static const int TT_UP_Y = 82, TT_DOWN_Y = 278;
+static const uint32_t TT_COLORS[12] = {0xF0454B, 0xFF9A3C, 0xFFC93C, 0x8BD346, 0x4CC25A, 0x2EC4B6,
+                                       0x4AA8FF, 0x6C7BFF, 0xA66CFF, 0xE36CD9, 0xFF7EB0, 0xC9A26B};
+
+static void tt_pos(float k, int &x, int &y) {
+  float a = k * 3.14159265f / 6.0f;  // k = 1..12, clockwise from twelve o'clock
+  x = 180 + (int) lroundf(TT_R * sinf(a));
+  y = 180 - (int) lroundf(TT_R * cosf(a));
+}
+
+void PetEngine::tables_start_sweep() {
+  tt_sweep_ms_ = now_ ? now_ : 1;
+  tt_sel_ = 0;
+}
+
+void PetEngine::tables_step(int dir) {
+  tt_table_ = (uint8_t) ((tt_table_ - 1 + dir + 12) % 12 + 1);
+  tt_dir_ = (int8_t) dir;
+  tt_change_ms_ = now_ ? now_ : 1;
+  if (tt_sel_) {
+    tt_sel_ms_ = tt_change_ms_;  // keep the picked fact (7 x 8 becomes 8 x 8) and redraw its dots
+    tt_sweep_ms_ = 0;
+  } else {
+    tables_start_sweep();
+  }
+}
+
+bool PetEngine::tables_animating(uint32_t now) const {
+  if (tt_sweep_ms_ && now - tt_sweep_ms_ < (uint32_t) (12 * TT_STEP_MS + 600)) return true;
+  if (tt_sel_ && now - tt_sel_ms_ < 1200) return true;
+  return tt_change_ms_ && now - tt_change_ms_ < 300;
+}
+
+void PetEngine::tables_tap(int x, int y) {
+  for (int k = 1; k <= 12; k++) {
+    int bx, by;
+    tt_pos((float) k, bx, by);
+    if (sq(x - bx) + sq(y - by) < (TT_BR + 8) * (TT_BR + 8)) {
+      tt_sweep_ms_ = 0;  // a tap mid-sweep shows everything
+      tt_sel_ = tt_sel_ == k ? 0 : (uint8_t) k;
+      tt_sel_ms_ = now_ ? now_ : 1;
+      return;
+    }
+  }
+  if (abs(x - 180) < 50 && abs(y - TT_UP_Y) < 26) {
+    tables_step(1);
+    return;
+  }
+  if (abs(x - 180) < 50 && abs(y - TT_DOWN_Y) < 26) {
+    tables_step(-1);
+    return;
+  }
+  if (sq(x - 180) + sq(y - 180) < TT_INNER * TT_INNER) {
+    if (tt_sel_)
+      tt_sel_ = 0;  // back to the table
+    else
+      tables_start_sweep();  // count it up again
+  }
+}
+
+void PetEngine::draw_tables(Canvas &c, uint32_t now) {
+  const int n = tt_table_;
+  const uint32_t col = TT_COLORS[(n - 1) % 12];
+  rect(c, 0, 0, SCREEN, SCREEN, 0x16122A);
+  circle(c, 180, 180, TT_R + TT_BR + 6, 0x221B3A);  // the ring the answers sit on
+  circle(c, 180, 180, TT_INNER + 2, 0x16122A);
+
+  // Sweep: how many answers are out, and where the light is.
+  int32_t el = tt_sweep_ms_ ? (int32_t) (now - tt_sweep_ms_) : (1 << 30);
+  bool sweeping = el < 12 * TT_STEP_MS + 600;
+  int shown = sweeping ? el / TT_STEP_MS + 1 : 12;
+  if (shown > 12) shown = 12;
+  float head = (float) el / TT_STEP_MS + 1.0f;  // the light's position, in answers
+
+  // The light's trail, under the bubbles.
+  if (sweeping && head <= 12.6f) {
+    for (int i = 6; i >= 1; i--) {
+      float k = head - i * 0.09f;
+      if (k < 0.5f) continue;
+      int tx, ty;
+      tt_pos(k, tx, ty);
+      circle(c, tx, ty, 3 + (6 - i), mix(0x221B3A, col, 0.25f + 0.1f * (6 - i)));
+    }
+  }
+
+  char buf[24];
+  for (int k = 1; k <= 12; k++) {
+    int bx, by;
+    tt_pos((float) k, bx, by);
+    snprintf(buf, sizeof(buf), "x%d", k);
+    if (k > shown) {  // not reached yet
+      circle(c, bx, by, TT_BR, 0x2E2650);
+      text(c, bx, by - 3, buf, 1, 0x6A6480, true, false);
+      continue;
+    }
+    int r = TT_BR;
+    int32_t t = sweeping ? el - (k - 1) * TT_STEP_MS : 1000;
+    if (t >= 0 && t < 260) r = (int) lroundf(TT_BR * (1.0f + 0.35f * sinf(3.14159265f * t / 260.0f)));
+    bool sel = k == tt_sel_;
+    if (sel) circle(c, bx, by, r + 5, 0xFFFFFF);
+    circle(c, bx, by, r + 2, 0x1A1426);
+    circle(c, bx, by, r, sel ? mix(col, 0xFFFFFF, 0.35f) : col);
+    snprintf(buf, sizeof(buf), "%d", n * k);
+    text(c, bx, by - 12, buf, 2, 0xFFFFFF, true, true);
+    snprintf(buf, sizeof(buf), "x%d", k);
+    text(c, bx, by + 6, buf, 1, 0x2B2233, true, false);
+  }
+
+  // The light itself, on top.
+  if (sweeping && head <= 12.6f) {
+    int lx, ly;
+    tt_pos(head, lx, ly);
+    circle(c, lx, ly, 10, mix(col, 0xFFFFFF, 0.5f));
+    circle(c, lx, ly, 6, 0xFFFFFF);
+  }
+
+  // Up and down arrows for the next and previous tables, with their numbers.
+  auto arrow = [&](int cy, bool up) {
+    for (int i = 0; i < 9; i++) {
+      int w = 2 + i * 2;
+      rect(c, 180 - w / 2, up ? cy - 6 + i : cy + 6 - i, w, 1, 0x8A80B0);
+    }
+  };
+  arrow(TT_UP_Y - 8, true);
+  arrow(TT_DOWN_Y + 8, false);
+  snprintf(buf, sizeof(buf), "%d", n % 12 + 1);
+  text(c, 180, TT_UP_Y + 5, buf, 1, 0x8A80B0, true, false);
+  snprintf(buf, sizeof(buf), "%d", (n + 10) % 12 + 1);
+  text(c, 180, TT_DOWN_Y - 12, buf, 1, 0x8A80B0, true, false);
+
+  // The middle. A new table slides its number in from the side it came from.
+  int slide = 0;
+  if (tt_change_ms_ && now - tt_change_ms_ < 200) slide = tt_dir_ * (int) (24 * (1.0f - (now - tt_change_ms_) / 200.0f));
+  if (tt_sel_) {
+    // A picture of n x k: k rows of n dots, the rows appearing one by one.
+    int k = tt_sel_, big = n > k ? n : k;
+    int p = 86 / big;
+    if (p > 9) p = 9;
+    int dot = p - 2 < 2 ? 2 : p - 2;
+    int gw = n * p + (n - 1) / 5 * 2, gh = k * p + (k - 1) / 5 * 2;  // a small gap every five, for counting
+    int ox = 180 - gw / 2, oy = 148 - gh / 2;
+    int rows = (int) ((now - tt_sel_ms_) / 70) + 1;
+    for (int r = 0; r < k && r < rows; r++)
+      for (int q = 0; q < n; q++)
+        rect(c, ox + q * p + q / 5 * 2, oy + r * p + r / 5 * 2, dot, dot, r % 2 ? mix(col, 0xFFFFFF, 0.3f) : col);
+    snprintf(buf, sizeof(buf), "%d x %d = %d", n, k, n * k);
+    text(c, 180, 202 + slide, buf, 3, 0xFFFFFF);
+    snprintf(buf, sizeof(buf), "%d row%s of %d", k, k == 1 ? "" : "s", n);
+    text(c, 180, 234, buf, 2, 0xC9C2E8, true, false);
+  } else if (sweeping) {
+    // Counting up: the fact the light just reached, big.
+    snprintf(buf, sizeof(buf), "%d x %d", n, shown);
+    text(c, 180, 118, buf, 3, 0xC9C2E8);
+    snprintf(buf, sizeof(buf), "%d", n * shown);
+    text(c, 180, 152 + slide, buf, 7, col);
+    text(c, 180, 220, "counting up...", 2, 0x8A80B0, true, false);
+  } else {
+    text(c, 180, 116, "TIMES TABLE", 2, 0xC9C2E8, true, false);
+    snprintf(buf, sizeof(buf), "%d", n);
+    text(c, 180, 140 + slide, buf, 8, col);
+    text(c, 180, 208, "tap an answer", 2, 0x8A80B0, true, false);
+    text(c, 180, 228, "swipe up/down", 2, 0x8A80B0, true, false);
+  }
 }
 
 // --- Settings page: sound, brightness, and a held New egg button. ---

@@ -8,6 +8,8 @@
 namespace petcore {
 
 static const int SCREEN = 360;
+// Pages, left to right; a swipe moves one page and wraps around (so the times tables are one swipe right of the pet).
+enum Page : uint8_t { PAGE_PET, PAGE_STATS, PAGE_SHOP, PAGE_SETTINGS, PAGE_TABLES, PAGE_COUNT };
 
 // Everything is drawn through this one call. Colours are 0xRRGGBB.
 class Canvas {
@@ -354,6 +356,12 @@ class PetEngine {
   void settings_tap(int x, int y);
   float egg_hold_progress(uint32_t now) const;  // 0..1 while the New egg button is held
   void draw_page_dots(Canvas &c);
+  // Times-table page: the table as a clock face, a count-up sweep, and a dot picture of a picked fact.
+  void draw_tables(Canvas &c, uint32_t now);
+  void tables_tap(int x, int y);
+  void tables_step(int dir);  // next (+1) or previous (-1) table
+  void tables_start_sweep();
+  bool tables_animating(uint32_t now) const;
 
   SaveData s_{};
   bool dirty_{false};
@@ -385,6 +393,12 @@ class PetEngine {
   uint32_t now_{0};
 
   uint8_t page_{0};
+  // times-table page
+  uint8_t tt_table_{2};       // 1..12
+  uint8_t tt_sel_{0};         // picked fact, table x tt_sel_ (1..12); 0 none
+  int8_t tt_dir_{0};          // which way the table number last changed, for its slide-in
+  uint32_t tt_sweep_ms_{0};   // when the count-up sweep started; 0 none
+  uint32_t tt_sel_ms_{0}, tt_change_ms_{0};
   Overlay overlay_{OV_NONE};
   uint32_t overlay_since_{0};
   Activity act_{ACT_IDLE};

@@ -1462,26 +1462,36 @@ static void menu_pos(int i, int &x, int &y) {
     x = 98 + (i - 7) * 82;
   }
 }
-// Facts keypad: twelve round keys round the edge like a clock, digits 1-9 at one to nine o'clock, 0 at ten,
-// delete at eleven and skip at twelve. A touch anywhere in the outer ring counts for the key it is nearest by
-// angle, so a slightly missed key still counts and the next key is a whole 30 degrees away.
-static const int FK_R = 142, FK_KEY_R = 30, FK_INNER = 78;
-static int fk_slot(int key) { return key == 0 ? 10 : key == 10 ? 11 : key == 11 ? 12 : key; }
+// Facts keypad: the ten digits round the edge like a rotary dial (0 at the top, then 1 to 9 clockwise), and
+// delete and skip as two buttons in the middle, away from the digits so a missed digit can't skip the question.
+// A touch anywhere in the outer ring counts for the digit it is nearest by angle (each has 36 degrees).
+static const int FK_R = 142, FK_KEY_R = 36, FK_INNER = 100;
+static const int FK_BTN_Y = 222, FK_BTN_W = 72, FK_BTN_H = 34, FK_DEL_X = 138, FK_SKIP_X = 222;
 void PetEngine::facts_key_pos(int key, int &x, int &y, int &w) {
-  float a = fk_slot(key) * 3.14159265f / 6.0f;
+  if (key >= 10) {  // 10 delete, 11 skip
+    x = key == 10 ? FK_DEL_X : FK_SKIP_X;
+    y = FK_BTN_Y;
+    w = FK_BTN_W;
+    return;
+  }
+  float a = key * 3.14159265f / 5.0f;
   x = 180 + (int) lroundf(FK_R * sinf(a));
   y = 180 - (int) lroundf(FK_R * cosf(a));
   w = 2 * FK_KEY_R;
 }
-// Which key a touch is for, or -1 (the middle, where the question is).
+// Which key a touch is for, or -1 (nothing there).
 static int facts_key_at(int x, int y) {
   int dx = x - 180, dy = y - 180;
-  if (dx * dx + dy * dy < FK_INNER * FK_INNER) return -1;
-  float a = atan2f((float) dx, (float) -dy);  // 0 at twelve o'clock, clockwise
-  if (a < 0) a += 2 * 3.14159265f;
-  int slot = (int) lroundf(a / (3.14159265f / 6.0f));
-  if (slot == 0) slot = 12;
-  return slot == 10 ? 0 : slot == 11 ? 10 : slot == 12 ? 11 : slot;
+  if (dx * dx + dy * dy >= FK_INNER * FK_INNER) {
+    float a = atan2f((float) dx, (float) -dy);  // 0 at the top, clockwise
+    if (a < 0) a += 2 * 3.14159265f;
+    return (int) lroundf(a / (3.14159265f / 5.0f)) % 10;
+  }
+  if (abs(y - FK_BTN_Y) <= FK_BTN_H / 2 + 4) {
+    if (abs(x - FK_DEL_X) <= FK_BTN_W / 2 + 2) return 10;
+    if (abs(x - FK_SKIP_X) <= FK_BTN_W / 2 + 2) return 11;
+  }
+  return -1;
 }
 static void pad_center(int i, int &x, int &y) {
   x = 180 + (i % 2 ? PAD_OFF : -PAD_OFF);
@@ -3191,38 +3201,48 @@ void PetEngine::draw_facts(Canvas &c, uint32_t now) {
     return;
   }
   int secs = (int) ((int32_t) (game_end_ms_ - now) / 1000) + 1;
-  // In the middle: the question, the answer box, then the score and the time left. The keys ring the edge.
+  // In the middle: the question, the answer box, the score (or, after an answer, what the answer was), delete
+  // and skip, and the time left. The digits ring the edge.
   snprintf(buf, sizeof(buf), "%d x %d =", ma_, mb_);
   if (strlen(buf) > 7)
-    text(c, 180, 110, buf, 3, 0xFFFFFF);  // "10 x 10 =" at the big size would touch the 0 and 2 keys
+    text(c, 180, 108, buf, 3, 0xFFFFFF);  // "10 x 10 =" at the big size would touch the keys
   else
     text(c, 180, 104, buf, 4, 0xFFFFFF);
+  int need = mans_ >= 100 ? 3 : (mans_ >= 10 ? 2 : 1);
+  bool skipped = feedback_ == 2 && entry_len_ < need;
   uint32_t box = feedback_ == 1 ? 0x7CFF8A : feedback_ == 2 ? 0xFF8A8A : 0xFFF6E0;
-  rect(c, 118, 146, 124, 40, 0x2B2233);
-  rect(c, 121, 149, 118, 34, box);
+  rect(c, 118, 138, 124, 40, 0x2B2233);
+  rect(c, 121, 141, 118, 34, box);
   if (feedback_ == 2)
-    snprintf(buf, sizeof(buf), "%d", mans_);
+    snprintf(buf, sizeof(buf), skipped ? "-" : "%d", entry_);  // what was typed, so a slip is easy to see
   else if (entry_len_)
     snprintf(buf, sizeof(buf), "%d%s", entry_, (now / 400) % 2 ? "_" : " ");
   else
     snprintf(buf, sizeof(buf), "%s", (now / 400) % 2 ? "_" : " ");
-  text(c, 180, 152, buf, 4, 0x2B2233, true, false);
-  snprintf(buf, sizeof(buf), "%d right", run_score_);
-  text(c, 180, 200, buf, 2, 0x7CFF8A);
-  snprintf(buf, sizeof(buf), "%ds left", secs < 0 ? 0 : secs);
-  text(c, 180, 222, buf, 2, secs <= 10 ? 0xFF8A8A : 0xC9C2E8);
-  for (int k = 0; k < 12; k++) {
+  text(c, 180, 144, buf, 4, 0x2B2233, true, false);
+  if (feedback_ == 2) {
+    snprintf(buf, sizeof(buf), skipped ? "skipped: %d" : "it's %d", mans_);
+    text(c, 180, 186, buf, 2, 0xFFD23F);
+  } else {
+    snprintf(buf, sizeof(buf), "%d right", run_score_);
+    text(c, 180, 186, buf, 2, 0x7CFF8A);
+  }
+  for (int k = 10; k <= 11; k++) {
     int kx, ky, kw;
     facts_key_pos(k, kx, ky, kw);
-    uint32_t face = k == 10 ? 0xFFD0E4 : k == 11 ? 0xFFE3B0 : 0xFFF6E0;
+    rect(c, kx - kw / 2, ky - FK_BTN_H / 2, kw, FK_BTN_H, 0x2B2233);
+    rect(c, kx - kw / 2 + 2, ky - FK_BTN_H / 2 + 2, kw - 4, FK_BTN_H - 4, k == 10 ? 0xFFD0E4 : 0xFFE3B0);
+    text(c, kx, ky - 7, k == 10 ? "del" : "skip", 2, 0x2B2233, true, false);
+  }
+  snprintf(buf, sizeof(buf), "%ds left", secs < 0 ? 0 : secs);
+  text(c, 180, 250, buf, 2, secs <= 10 ? 0xFF8A8A : 0xC9C2E8);
+  for (int k = 0; k < 10; k++) {
+    int kx, ky, kw;
+    facts_key_pos(k, kx, ky, kw);
     circle(c, kx, ky, FK_KEY_R + 2, 0x2B2233);
-    circle(c, kx, ky, FK_KEY_R - 1, face);
-    if (k < 10) {
-      char d[2] = {(char) ('0' + k), 0};
-      text(c, kx, ky - 13, d, 4, 0x2B2233, true, false);
-    } else {
-      text(c, kx, ky - 7, k == 10 ? "del" : "skip", 2, 0x2B2233, true, false);
-    }
+    circle(c, kx, ky, FK_KEY_R - 1, 0xFFF6E0);
+    char d[2] = {(char) ('0' + k), 0};
+    text(c, kx, ky - 14, d, 4, 0x2B2233, true, false);
   }
 }
 

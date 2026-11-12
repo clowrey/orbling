@@ -119,9 +119,10 @@ energy, Jump and Catch burn a little weight, and each game keeps its best score.
   turns green; a wrong one turns red and the right one lights up, with the whole fact underneath. The wrong
   answers are the tempting ones (a neighbouring row or column, or one off). Questions start with the easy tables
   (x2, x5, x10), then add x3 and x4, then everything up to 10 x 10.
-- **Facts** (times tables): "6 x 4 =" in the middle and twelve round keys round the edge like a clock (1-9 at one to
-  nine o'clock, 0 at ten, delete at eleven, skip at twelve; a touch counts for the nearest key); type the answer, as many as you can in 90 seconds. It
-  checks as soon as enough digits are typed; a wrong answer shows the right one. `< del` deletes a digit, `skip` skips
+- **Facts** (times tables): "6 x 4 =" in the middle and the ten digits round the edge like a rotary dial (0 at the top, then
+  1 to 9 clockwise; a touch counts for the nearest digit), with delete and skip as buttons in the middle; type the answer, as many as you can in 90 seconds. It
+  checks as soon as enough digits are typed; a wrong answer shows what was typed in red and the
+  right one under it ("it's 24"). `< del` deletes a digit, `skip` skips
   (and shows the answer). It moves on to harder tables as the score goes up (x3 and x4 after 5 right, everything after 12).
 
 - **Fizz** (times tables): "6 x 7 = ?" and four number bubbles float up; pop the right one before it gets away.

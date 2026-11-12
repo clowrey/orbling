@@ -955,6 +955,28 @@ int main(int argc, char **argv) {
       printf("\n");
     }
 
+  {  // Facts: the right answer typed with sloppy taps (up to 15 degrees and 20 px off a digit) always counts
+    prep(e, 8, STAGE_ADULT);
+    uint32_t t = 30000;
+    e.start_game(GAME_FACTS);
+    tap(e, 180, 180, t);
+    int asked = 0;
+    for (int q = 0; q < 30 && e.in_game(); q++) {
+      std::string digits = std::to_string(e.math_answer());
+      for (size_t i = 0; i < digits.size(); i++) {
+        int k = digits[i] - '0';
+        float a = (k * 36 + (int) ((q + i) % 3 - 1) * 15) * 3.14159265f / 180.0f;
+        float r = 142 + (int) (q % 3 - 1) * 20;
+        tap(e, 180 + (int) lroundf(r * sinf(a)), 180 - (int) lroundf(r * cosf(a)), t);
+      }
+      asked++;
+      t += 700;
+      e.loop(t);
+    }
+    printf("facts sloppy taps: %d right of %d\n", e.run_score(), asked);
+    if (e.run_score() != asked) abort();
+  }
+
   {  // a swipe up from the bottom edge goes home: from a game, and from the times tables page
     prep(e, 6, STAGE_ADULT);
     uint32_t t = 20000;

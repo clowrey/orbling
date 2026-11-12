@@ -37,7 +37,8 @@ void Orbling::setup() {
   petcore::SaveData saved{};
   // Older firmware saved fewer bytes under the same key. Fields are only appended, so an old save is the start
   // of a new one; new fields stay zero and the engine fills in what needs a default (it reads the magic).
-  bool loaded = this->pref_.load(&saved) || load_older_save_<petcore::SAVE_V8_SIZE>(key, saved) ||
+  bool loaded = this->pref_.load(&saved) || load_older_save_<petcore::SAVE_V9_SIZE>(key, saved) ||
+                load_older_save_<petcore::SAVE_V8_SIZE>(key, saved) ||
                 load_older_save_<petcore::SAVE_V7_SIZE>(key, saved) ||
                 load_older_save_<petcore::SAVE_V6_SIZE>(key, saved) ||
                 load_older_save_<petcore::SAVE_V5_SIZE>(key, saved) ||

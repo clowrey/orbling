@@ -116,6 +116,9 @@ struct SaveData {
   uint16_t owned3;      // owned items 32-47: bit (id - 32) (v8; was padding, so zero before)
   uint16_t chant_medals;  // Chant: bit (n - 1) once the n times table has been chanted all through (v9)
   uint16_t best_chant;    // Chant: most tables finished in one game (v9)
+  // The Math need, kept as how much math it is missing (0 = full), so saves from before it start full (v10).
+  uint8_t math_need;
+  uint8_t pad7[3];
 };
 
 enum GameKind : uint8_t {
@@ -135,6 +138,7 @@ static const size_t SAVE_V5_SIZE = 80;  // before the times-tables games
 static const size_t SAVE_V6_SIZE = 84;  // before smarts, Fizz and Munch
 static const size_t SAVE_V7_SIZE = 92;  // before the division game
 static const size_t SAVE_V8_SIZE = 96;  // before Chant
+static const size_t SAVE_V9_SIZE = 100;  // before the Math need
 static_assert(offsetof(SaveData, best_run) == SAVE_V1_SIZE, "v1 fields must stay where they were");
 static_assert(offsetof(SaveData, discipline) == SAVE_V2_SIZE, "v2 fields must stay where they were");
 static_assert(offsetof(SaveData, best_catch) == SAVE_V3_SIZE, "v3 fields must stay where they were");
@@ -143,7 +147,8 @@ static_assert(offsetof(SaveData, best_quiz) == SAVE_V5_SIZE, "v5 fields must sta
 static_assert(offsetof(SaveData, best_fizz) == SAVE_V6_SIZE, "v6 fields must stay where they were");
 static_assert(offsetof(SaveData, best_share) == SAVE_V7_SIZE, "v7 fields must stay where they were");
 static_assert(offsetof(SaveData, chant_medals) == SAVE_V8_SIZE, "v8 fields must stay where they were");
-static_assert(sizeof(SaveData) == 100, "save size");
+static_assert(offsetof(SaveData, math_need) == SAVE_V9_SIZE, "v9 fields must stay where they were");
+static_assert(sizeof(SaveData) == 104, "save size");
 
 // Growth by time together (seconds of SaveData::together_s) at which each stage starts, and when an elder
 // sets off and leaves an egg.
@@ -246,6 +251,11 @@ class PetEngine {
   int care_mistakes() const { return s_.care_mistakes; }
   int discipline() const { return s_.discipline; }
   int smarts() const { return s_.smarts_x10 / 10; }  // intelligence 0..100
+  // The Math need, 0..100 like food: it runs down over time and right answers in the math games fill it.
+  // Empty, health drops and Smarts start to fade. Eggs and babies don't need it.
+  int math() const { return 100 - s_.math_need; }
+  bool needs_math() const { return s_.stage >= STAGE_CHILD; }
+  void math_practice(int right);  // right answers done elsewhere (the simulator's players)
   bool in_tantrum() const { return s_.tantrum > 0; }
   const char *parent_name() const { return parent_; }  // "" for a first-generation pet
   // Settings (also on the settings page, the third page)

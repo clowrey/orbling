@@ -782,7 +782,7 @@ void PetEngine::show_toast(const char *msg, uint32_t dur_ms) {
 bool PetEngine::needs_attention() const {
   if (s_.dead || s_.stage == STAGE_EGG) return false;
   return s_.food < 20 || s_.happy < 20 || s_.poops >= 3 || s_.sick || (s_.asleep && s_.lights_on) || s_.clean < 15 ||
-         s_.health < 30 || s_.tantrum;
+         s_.health < 30 || s_.tantrum || (needs_math() && math() < 20);
 }
 
 const char *PetEngine::stage_name() const { return STAGE_NAMES[s_.stage > 5 ? 5 : s_.stage]; }
@@ -794,6 +794,7 @@ const char *PetEngine::mood() const {
   if (s_.sick) return "sick";
   if (s_.tantrum) return "naughty";
   if (s_.food < 20) return "hungry";
+  if (needs_math() && math() < 20) return "needs math";
   if (s_.happy < 20) return "sad";
   if (s_.poops >= 3 || s_.clean < 15) return "dirty";
   if (s_.energy < 15) return "tired";
@@ -940,6 +941,12 @@ void PetEngine::tick_minute(int mod, bool active) {
     add(s_.energy, s_.lights_on ? 1 : 2);
   }
   if (every(owns(IT_PLANT) ? 40 : 20)) add(s_.clean, -1);
+  // Math: awake it lasts about 28 pet hours (about 2 hours of play), asleep 4 days. With half an hour of play a
+  // day, two math games a day keep it topped up.
+  if (needs_math() && s_.math_need < 100 && every(s_.asleep ? 60 : 17)) {
+    s_.math_need++;
+    if (s_.math_need == 80 && active) show_toast("Math time? (Play)", 5000);
+  }
   if (s_.poops && every(s_.poops >= 3 ? 2 : 8 - 2 * s_.poops)) add(s_.clean, -1);
 
   if (s_.poop_timer > 0 && !s_.asleep) {
@@ -951,6 +958,7 @@ void PetEngine::tick_minute(int mod, bool active) {
   if (s_.age_min % 240 == 0) s_.snacks_hour = 0;
 
   bool starving = s_.food == 0, miserable = s_.happy == 0, filthy = s_.clean < 20 || s_.poops >= 3;
+  bool no_math = needs_math() && math() == 0;
   if (!s_.sick && !s_.asleep && active) {
     int chance = 0;  // per mille per minute
     if (s_.clean < 30) chance += 2;
@@ -986,7 +994,10 @@ void PetEngine::tick_minute(int mod, bool active) {
   if (s_.sick && every(10 * slow)) add(s_.health, -1);
   if (starving && every(20 * slow)) add(s_.health, -1);
   if ((miserable || filthy) && every(30 * slow)) add(s_.health, -1);
-  if (!s_.sick && !starving && !miserable && !filthy && every(10)) add(s_.health, 1);
+  if (no_math && every(20 * slow)) add(s_.health, -1);  // as bad as starving
+  if (!s_.sick && !starving && !miserable && !filthy && !no_math && every(10)) add(s_.health, 1);
+  // Smarts fade without practice: slowly once Math is low, faster when it is empty.
+  if (needs_math() && math() < 25 && s_.smarts_x10 > 0 && every(no_math ? 5 : 15)) s_.smarts_x10--;
   if (s_.health == 0) {
     die();
     return;
@@ -1013,6 +1024,8 @@ void PetEngine::greet() {
     msg = "Clean up?";
   else if (s_.food < 30)
     msg = "I'm hungry!";
+  else if (needs_math() && math() < 30)
+    msg = "Math time!";
   else if (s_.energy < 20)
     msg = "Sleepy...";
   else if (s_.happy < 40)
@@ -1695,9 +1708,14 @@ void PetEngine::catch_move(float dt) {
 // A right answer in a math game. Smarts climb fast at first and slower near the top: 1.2 points per answer
 // from zero, 0.3 near 100. About 90 right answers reach 60, about 180 reach 100.
 void PetEngine::learn() {
+  s_.math_need = s_.math_need > 5 ? (uint8_t) (s_.math_need - 5) : 0;  // each right answer feeds the Math need
   int x = s_.smarts_x10 + 2 + (1000 - s_.smarts_x10) / 100;
   s_.smarts_x10 = (uint16_t) (x > 1000 ? 1000 : x);
   dirty_ = true;
+}
+
+void PetEngine::math_practice(int right) {
+  for (int i = 0; i < right; i++) learn();
 }
 
 // --- Fizz: number bubbles float up; pop the one that answers the question. A wrong pop, or letting the
@@ -2735,13 +2753,15 @@ void PetEngine::draw_pet(Canvas &c, uint32_t now, int pcx, int ground) {
 }
 
 void PetEngine::draw_hud(Canvas &c) {
-  static const char *const *ICONS[4] = {art::MINI_FOOD, art::MINI_HEART, art::MINI_BOLT, art::MINI_DROP};
-  int vals[4] = {s_.food, s_.happy, s_.energy, s_.clean};
+  static const char *const *ICONS[5] = {art::MINI_FOOD, art::MINI_HEART, art::MINI_BOLT, art::MINI_DROP,
+                                        art::MINI_MATH};
+  int vals[5] = {s_.food, s_.happy, s_.energy, s_.clean, math()};
   if (s_.stage == STAGE_EGG || s_.dead) return;
-  for (int i = 0; i < 4; i++) {
-    int cx = 99 + i * 54, y = 44;
-    icon(c, ICONS[i], 7, cx - 26, y - 7, 2);
-    bar(c, cx - 8, y - 4, 32, 8, vals[i]);
+  int n = needs_math() ? 5 : 4;
+  for (int i = 0; i < n; i++) {
+    int cx = n == 5 ? 88 + i * 46 : 99 + i * 54, y = 44;
+    icon(c, ICONS[i], 7, cx - 24, y - 7, 2);
+    bar(c, cx - 8, y - 4, n == 5 ? 28 : 32, 8, vals[i]);
   }
 }
 
@@ -3840,6 +3860,7 @@ void PetEngine::chant_begin(int table) {
 }
 
 void PetEngine::chant_hit(int k) {
+  if (s_.math_need >= 2) s_.math_need -= 2;
   ch_next_ = (uint8_t) k;
   ch_ok_ms_ = now_ ? now_ : 1;
   ch_wrong_ = -1;
@@ -4229,12 +4250,12 @@ void PetEngine::draw_stats(Canvas &c) {
   else
     snprintf(buf, sizeof(buf), "%s, %s in %s", stage_name(), NEXT[s_.stage > 5 ? 5 : s_.stage], when);
   text(c, 180, 80, buf, 2, 0xFFFFFF);
-  // food, happiness, energy, cleanliness, health, discipline, smarts
-  static const char *const *ICONS[7] = {art::MINI_FOOD,  art::MINI_HEART, art::MINI_BOLT, art::MINI_DROP,
-                                       art::MINI_CROSS, art::MINI_DISC,  art::MINI_BOOK};
-  int vals[7] = {s_.food, s_.happy, s_.energy, s_.clean, s_.health, s_.discipline, smarts()};
-  for (int i = 0; i < 7; i++) {
-    int y = 103 + i * 21;
+  // food, happiness, energy, cleanliness, math, health, discipline, smarts
+  static const char *const *ICONS[8] = {art::MINI_FOOD, art::MINI_HEART, art::MINI_BOLT, art::MINI_DROP,
+                                       art::MINI_MATH, art::MINI_CROSS, art::MINI_DISC, art::MINI_BOOK};
+  int vals[8] = {s_.food, s_.happy, s_.energy, s_.clean, math(), s_.health, s_.discipline, smarts()};
+  for (int i = 0; i < 8; i++) {
+    int y = 101 + i * 19;
     icon(c, ICONS[i], 7, 84, y - 2, 3);
     bar(c, 116, y + 2, 160, 12, vals[i]);
   }

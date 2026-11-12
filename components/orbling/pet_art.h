@@ -136,6 +136,7 @@ static const char *const MIC[12] = {
 };
 
 // --- math prizes and smarts ---
+static const char *const MINI_MATH[7] = {"KKKKKKK", "KLLLLLK", "KLWLWLK", "KLLWLLK", "KLWLWLK", "KLLLLLK", "KKKKKKK"};
 static const char *const MINI_BOOK[7] = {"KKKKKKK", "KLLKWWK", "KLLKWWK", "KLLKWWK", "KLLKWWK", "KKKKKKK", "......."};
 static const char *const WIZARD_HAT[12] = {
     ".....KK.....", "....KLLK....", "....KLYK....", "...KLLLLK...", "...KLLYLK...", "..KLLLLLLK..",

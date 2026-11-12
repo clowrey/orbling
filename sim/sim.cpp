@@ -495,7 +495,8 @@ struct Session {
   int start_min, len_min;
 };
 static void simulate(const char *label, std::vector<Session> sessions, int days, int away_from = -1,
-                     int away_to = -1) {
+                     int away_to = -1, bool math_games = true) {
+  int games = 0;
   PetEngine e;
   e.new_game(42);
   const uint32_t epoch0 = NOON_UTC - 6 * 3600;  // 06:00 local on day 0
@@ -534,15 +535,16 @@ static void simulate(const char *label, std::vector<Session> sessions, int days,
         e.state().happy = (uint8_t) std::min(100, e.happy() + 20);
         e.state().coins += 5;
         e.state().runs++;
+        if (math_games && (++games % 2 == 0 || e.math() < 40)) e.math_practice(7);  // a quiz, 7 right
       }
     }
     if (e.is_dead() && died_at < 0) died_at = (int) (t / 60);
     if ((day != last_day && mod >= 23 * 60 + 58) || (e.is_dead() && died_at == (int) (t / 60))) {
       last_day = day;
       printf("  %-16s day %2d %s gen %d %-6s %-20s %5.1fh together  food %3d happy %3d energy %3d clean %3d "
-             "health %3d disc %3d wt %2d oops %d coins %3d %s\n",
+             "health %3d math %3d smarts %3d disc %3d wt %2d oops %d coins %3d %s\n",
              label, day, away ? "(away)" : "      ", e.generation(), e.stage_name(), e.species(), e.hours_together(),
-             e.food(), e.happy(), e.energy(), e.cleanliness(), e.health(), e.discipline(), e.weight(),
+             e.food(), e.happy(), e.energy(), e.cleanliness(), e.health(), e.math(), e.smarts(), e.discipline(), e.weight(),
              e.care_mistakes(), e.coins(), e.mood());
     }
     if (e.is_dead()) break;
@@ -950,5 +952,6 @@ int main(int argc, char **argv) {
   simulate("1 h a day", {{19 * 60, 60}}, 10);
   simulate("30 min, away 3d", {{18 * 60, 30}}, 10, 3, 5);
   simulate("abandoned day 1", {{18 * 60, 30}}, 12, 1, 99);
+  simulate("30 min, no math", {{18 * 60, 30}}, 10, -1, -1, false);
   return 0;
 }

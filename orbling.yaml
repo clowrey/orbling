@@ -102,6 +102,12 @@ sensor:
     update_interval: 30s
     lambda: return id(pet).pet().cleanliness();
   - platform: template
+    name: Math
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    update_interval: 30s
+    lambda: return id(pet).pet().math();
+  - platform: template
     name: Health
     unit_of_measurement: "%"
     accuracy_decimals: 0

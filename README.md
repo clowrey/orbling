@@ -79,7 +79,8 @@ Assistant it takes the time and time zone from there. Without Home Assistant it 
 | Settings page | Sound on/off, brightness (4 levels), **New egg** (hold 2 s; replaces the pet) |
 | Hold anywhere after it is gone | Hatch a new egg |
 
-The four gauges are food (apple), happiness (heart), energy (bolt) and cleanliness (drop). Health and
+The gauges are food (apple), happiness (heart), energy (bolt), cleanliness (drop) and, from the child stage,
+**math** (a blue x). Health and
 discipline are on the stats page, with weight, generation, care mistakes, coins, its parent, and how much more
 time together until it grows up.
 
@@ -88,6 +89,12 @@ time together until it grows up.
 tired and wants to play. Untouched for 5 minutes it dozes (eyes shut, a small "z", the screen dims): needs then run
 30x slower than with you, and it cannot get sick, throw a tantrum or count a care mistake. The first touch wakes it,
 and it says what it needs most ("I'm hungry!", "Clean up?", "Play with me!").
+
+**Math** is a need like food, from the child stage on. It runs down by itself (about 2 hours of play
+from full to empty, much slower while it dozes or sleeps) and every right answer in a math game fills
+it a little (each number said in Chant too). Half an hour of play a day with two math games keeps it up.
+Low, it asks for "Math time!"; empty, its health drops as fast as when it is starving (a care mistake
+if nobody steps in), and its **Smarts** fade: slowly while Math is under 25, faster at 0.
 
 **Energy** only refills while it sleeps: at night, or a nap when you turn the light off (it says "Sleepy...
 lights off?" when the bolt gets low). In the dark the bolt fills from empty in 1 minute (2 with the light on); a
@@ -311,7 +318,7 @@ Some JC3636W518 boards have a PDM microphone instead; if Chant never hears anyth
 
 ## Home Assistant
 
-Sensors: Food, Happiness, Energy, Cleanliness, Health, Discipline, Time together (h), Grows up in (min), Coins,
+Sensors: Food, Happiness, Energy, Cleanliness, Math, Health, Discipline, Time together (h), Grows up in (min), Coins,
 Weight, Care mistakes, Generation, Smarts, Best jump run, Best catch, Best pop, Best copy, Best quiz, Best facts,
 Best fizz, Best munch, Best share, Best chant, Times table medals. Text: Pet name, Species, Stage, Mood, Parent.
 Binary: Needs attention, Sick, Asleep, Tantrum.

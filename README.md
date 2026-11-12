@@ -74,6 +74,7 @@ Assistant it takes the time and time zone from there. Without Home Assistant it 
 | Buttons, left to right | Feed (meal or snack), Play (game menu), Clean, Light (off = nap, on = wake), Medicine, Scold |
 | Tap the pet | Pat it (happiness) |
 | Tap the gauges at the top | Stats page |
+| Swipe up from the bottom edge | Home: back to the pet from any page, menu or game (a game's points still count) |
 | Swipe left / right | Pet → stats → shop → settings → times tables pages (the times tables are also one swipe right from the pet); tap the stats page to go back |
 | Shop page | Coins at the top; tabs for food, toys and hats; tap an item twice to buy it, tap an owned hat to wear it |
 | Settings page | Sound on/off, brightness (4 levels), **New egg** (hold 2 s; replaces the pet) |
@@ -118,7 +119,8 @@ energy, Jump and Catch burn a little weight, and each game keeps its best score.
   turns green; a wrong one turns red and the right one lights up, with the whole fact underneath. The wrong
   answers are the tempting ones (a neighbouring row or column, or one off). Questions start with the easy tables
   (x2, x5, x10), then add x3 and x4, then everything up to 10 x 10.
-- **Facts** (times tables): "6 x 4 =" and a big number keypad (two rows of five digits, then wide delete and skip keys); type the answer, as many as you can in 90 seconds. It
+- **Facts** (times tables): "6 x 4 =" in the middle and twelve round keys round the edge like a clock (1-9 at one to
+  nine o'clock, 0 at ten, delete at eleven, skip at twelve; a touch counts for the nearest key); type the answer, as many as you can in 90 seconds. It
   checks as soon as enough digits are typed; a wrong answer shows the right one. `< del` deletes a digit, `skip` skips
   (and shows the answer). It moves on to harder tables as the score goes up (x3 and x4 after 5 right, everything after 12).
 

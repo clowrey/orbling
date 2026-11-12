@@ -107,6 +107,7 @@ static void button_pos(int i, int &x, int &y) {
 }
 
 static inline int sq(int v) { return v * v; }
+static const int HOME_SWIPE_Y = 285;  // a swipe up starting below this goes home
 static const int TT_DRAG_PX = 22;  // times tables: one table per this much drag up or down
 
 // ---------------------------------------------------------------------------------------------
@@ -1444,22 +1445,26 @@ static void menu_pos(int i, int &x, int &y) {
     x = 98 + (i - 7) * 82;
   }
 }
-// Facts keypad, as big as the round screen allows: digits in two rows of five across the wide middle (1-5,
-// 6-9 and 0), then two wide keys: delete and skip. Keys are 60x58 with 5 px gaps; a touch counts for the key
-// it is nearest, out to half the gap, so there are no dead spots between keys.
-static const int FK_W = 60, FK_H = 58, FK_GAP = 5, FK_ROW1 = 149, FK_WIDE_W = 118;
-static const int FK_ROW2 = FK_ROW1 + FK_H + FK_GAP, FK_ROW3 = FK_ROW2 + FK_H + FK_GAP;
+// Facts keypad: twelve round keys round the edge like a clock, digits 1-9 at one to nine o'clock, 0 at ten,
+// delete at eleven and skip at twelve. A touch anywhere in the outer ring counts for the key it is nearest by
+// angle, so a slightly missed key still counts and the next key is a whole 30 degrees away.
+static const int FK_R = 142, FK_KEY_R = 30, FK_INNER = 78;
+static int fk_slot(int key) { return key == 0 ? 10 : key == 10 ? 11 : key == 11 ? 12 : key; }
 void PetEngine::facts_key_pos(int key, int &x, int &y, int &w) {
-  if (key >= 10) {  // 10 delete, 11 skip
-    x = key == 10 ? 180 - (FK_WIDE_W + FK_GAP) / 2 : 180 + (FK_WIDE_W + FK_GAP) / 2;
-    y = FK_ROW3;
-    w = FK_WIDE_W;
-    return;
-  }
-  int idx = key == 0 ? 9 : key - 1;  // 1..9 then 0
-  x = 180 + (idx % 5 - 2) * (FK_W + FK_GAP);
-  y = idx / 5 ? FK_ROW2 : FK_ROW1;
-  w = FK_W;
+  float a = fk_slot(key) * 3.14159265f / 6.0f;
+  x = 180 + (int) lroundf(FK_R * sinf(a));
+  y = 180 - (int) lroundf(FK_R * cosf(a));
+  w = 2 * FK_KEY_R;
+}
+// Which key a touch is for, or -1 (the middle, where the question is).
+static int facts_key_at(int x, int y) {
+  int dx = x - 180, dy = y - 180;
+  if (dx * dx + dy * dy < FK_INNER * FK_INNER) return -1;
+  float a = atan2f((float) dx, (float) -dy);  // 0 at twelve o'clock, clockwise
+  if (a < 0) a += 2 * 3.14159265f;
+  int slot = (int) lroundf(a / (3.14159265f / 6.0f));
+  if (slot == 0) slot = 12;
+  return slot == 10 ? 0 : slot == 11 ? 10 : slot == 12 ? 11 : slot;
 }
 static void pad_center(int i, int &x, int &y) {
   x = 180 + (i % 2 ? PAD_OFF : -PAD_OFF);
@@ -1586,10 +1591,7 @@ void PetEngine::game_press(int x, int y) {
       break;
     case GAME_FACTS:
       if (feedback_ != 0) break;
-      for (int k = 0; k < 12; k++) {
-        int kx, ky, kw;
-        facts_key_pos(k, kx, ky, kw);
-        if (abs(x - kx) > (kw + FK_GAP) / 2 + 1 || abs(y - ky) > (FK_H + FK_GAP) / 2 + 1) continue;
+      for (int k = facts_key_at(x, y); k >= 0;) {
         if (k == 10) {  // delete
           entry_ /= 10;
           if (entry_len_) entry_len_--;
@@ -2175,7 +2177,7 @@ void PetEngine::touch_move(int x, int y) {
   ty_ = y;
   if (overlay_ == OV_GAME && (game_kind_ == GAME_CATCH || game_kind_ == GAME_MUNCH) && pressed_)
     catch_target_ = (float) x;  // drag to move
-  if (page_ == PAGE_TABLES && overlay_ == OV_NONE && pressed_) {
+  if (page_ == PAGE_TABLES && overlay_ == OV_NONE && pressed_ && ty0_ <= HOME_SWIPE_Y) {
     int dx = x - tx0_, dy = y - ty0_;
     if (tt_lock_ == 0 && (abs(dx) > 14 || abs(dy) > 14)) tt_lock_ = abs(dy) > abs(dx) ? 1 : -1;
     if (tt_lock_ == 1) {
@@ -2194,6 +2196,13 @@ void PetEngine::touch_up(uint32_t now) {
   if (!pressed_) return;
   pressed_ = false;
   last_user_ = now ? now : 1;
+  // A swipe up from the bottom edge goes home from anywhere: any page, menu or game.
+  if (ty0_ > HOME_SWIPE_Y && ty_ - ty0_ < -90 && abs(ty_ - ty0_) > 2 * abs(tx_ - tx0_)) {
+    wake_greet_ = false;
+    game_touch_ = false;
+    go_home();
+    return;
+  }
   if (wake_greet_) {
     wake_greet_ = false;
     greet();
@@ -2211,6 +2220,14 @@ void PetEngine::touch_up(uint32_t now) {
     return;
   }
   if (!long_fired_) tap(tx0_, ty0_);
+}
+
+// Back to the pet's page with nothing open. A game in progress ends there: its points count (coins, best score),
+// but the prize stand stays closed.
+void PetEngine::go_home() {
+  if (overlay_ == OV_GAME && run_phase_ != RUN_READY && run_score_ > 0) finish_game();
+  overlay_ = OV_NONE;
+  page_ = 0;
 }
 
 void PetEngine::long_press(int x, int y) {
@@ -3156,35 +3173,37 @@ void PetEngine::draw_facts(Canvas &c, uint32_t now) {
     return;
   }
   int secs = (int) ((int32_t) (game_end_ms_ - now) / 1000) + 1;
-  // question on top; under it the answer box, with the score on its left and the time left on its right
+  // In the middle: the question, the answer box, then the score and the time left. The keys ring the edge.
   snprintf(buf, sizeof(buf), "%d x %d =", ma_, mb_);
-  text(c, 180, 38, buf, 4, 0xFFFFFF);
+  if (strlen(buf) > 7)
+    text(c, 180, 110, buf, 3, 0xFFFFFF);  // "10 x 10 =" at the big size would touch the 0 and 2 keys
+  else
+    text(c, 180, 104, buf, 4, 0xFFFFFF);
   uint32_t box = feedback_ == 1 ? 0x7CFF8A : feedback_ == 2 ? 0xFF8A8A : 0xFFF6E0;
-  rect(c, 118, 76, 124, 40, 0x2B2233);
-  rect(c, 121, 79, 118, 34, box);
+  rect(c, 118, 146, 124, 40, 0x2B2233);
+  rect(c, 121, 149, 118, 34, box);
   if (feedback_ == 2)
     snprintf(buf, sizeof(buf), "%d", mans_);
   else if (entry_len_)
     snprintf(buf, sizeof(buf), "%d%s", entry_, (now / 400) % 2 ? "_" : " ");
   else
     snprintf(buf, sizeof(buf), "%s", (now / 400) % 2 ? "_" : " ");
-  text(c, 180, 82, buf, 4, 0x2B2233, true, false);
-  snprintf(buf, sizeof(buf), "%d", run_score_);
-  text(c, 74, 84, buf, 3, 0x7CFF8A);
-  snprintf(buf, sizeof(buf), "%ds", secs < 0 ? 0 : secs);
-  text(c, 288, 88, buf, 2, secs <= 10 ? 0xFF8A8A : 0xC9C2E8);
-  // the keypad
+  text(c, 180, 152, buf, 4, 0x2B2233, true, false);
+  snprintf(buf, sizeof(buf), "%d right", run_score_);
+  text(c, 180, 200, buf, 2, 0x7CFF8A);
+  snprintf(buf, sizeof(buf), "%ds left", secs < 0 ? 0 : secs);
+  text(c, 180, 222, buf, 2, secs <= 10 ? 0xFF8A8A : 0xC9C2E8);
   for (int k = 0; k < 12; k++) {
     int kx, ky, kw;
     facts_key_pos(k, kx, ky, kw);
     uint32_t face = k == 10 ? 0xFFD0E4 : k == 11 ? 0xFFE3B0 : 0xFFF6E0;
-    rect(c, kx - kw / 2, ky - FK_H / 2, kw, FK_H, 0x2B2233);
-    rect(c, kx - kw / 2 + 3, ky - FK_H / 2 + 3, kw - 6, FK_H - 6, face);
+    circle(c, kx, ky, FK_KEY_R + 2, 0x2B2233);
+    circle(c, kx, ky, FK_KEY_R - 1, face);
     if (k < 10) {
       char d[2] = {(char) ('0' + k), 0};
-      text(c, kx, ky - 14, d, 4, 0x2B2233, true, false);
+      text(c, kx, ky - 13, d, 4, 0x2B2233, true, false);
     } else {
-      text(c, kx, ky - 10, k == 10 ? "< del" : "skip", 3, 0x2B2233, true, false);
+      text(c, kx, ky - 7, k == 10 ? "del" : "skip", 2, 0x2B2233, true, false);
     }
   }
 }

@@ -331,6 +331,12 @@ class PetEngine {
   void set_activity(Activity a, uint32_t dur_ms);
   void show_toast(const char *msg, uint32_t dur_ms = 2500);
   void tap(int x, int y);
+  void go_home();
+
+ public:
+  int page() const { return page_; }
+
+ private:
   void long_press(int x, int y);
   void finish_game();
   void game_press(int x, int y);

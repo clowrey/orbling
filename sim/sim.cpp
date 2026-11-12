@@ -939,6 +939,28 @@ int main(int argc, char **argv) {
       printf("\n");
     }
 
+  {  // a swipe up from the bottom edge goes home: from a game, and from the times tables page
+    prep(e, 6, STAGE_ADULT);
+    uint32_t t = 20000;
+    e.start_game(GAME_FACTS);
+    tap(e, 180, 180, t);
+    e.touch_down(180, 330, t);
+    e.touch_move(180, 200);
+    t += 150;
+    e.touch_up(t);
+    bool left_game = !e.in_game() && !e.in_stand();
+    e.touch_down(60, 180, t);  // to the times tables page (one swipe right of the pet)
+    e.touch_move(260, 185);
+    t += 150;
+    e.touch_up(t);
+    e.touch_down(180, 330, t);
+    e.touch_move(185, 190);
+    t += 150;
+    e.touch_up(t);
+    printf("swipe home: from a game %d, from a page %d\n", (int) left_game, (int) (e.page() == 0));
+    if (!left_game || e.page() != 0) abort();
+  }
+
   prep(e, 4, STAGE_ADULT);
   fuzz(e);
   printf("\nfuzz: ok\n");

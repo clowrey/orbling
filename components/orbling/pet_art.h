@@ -135,6 +135,20 @@ static const char *const MIC[12] = {
     ".K.KLLLLK.K.", ".K..KKKK..K.", "..K......K..", "...KKKKKK...", ".....KK.....", "...KKKKKK...",
 };
 
+// --- the shop's second row of things (food, toys, hats and the ROOM tab) ---
+static const char *const ICE_CREAM[12] = {"....KKKK....", "...KPPPPK...", "..KPPWPPPK..", "..KPPPPPPK..", "..KKKKKKKK..", "...KOOOOK...", "...KOBOOK...", "....KOOK....", "....KOBK....", ".....KK.....", "............", "............"};
+static const char *const BURGER[12] = {"............", "...KKKKKK...", "..KOOOOOOK..", ".KOOWOOWOOK.", ".KKKKKKKKKK.", ".KGGGGGGGGK.", ".KRRRRRRRRK.", ".KDDDDDDDDK.", ".KKKKKKKKKK.", ".KOOOOOOOOK.", "..KKKKKKKK..", "............"};
+static const char *const DUCK[12] = {"............", "....KKK.....", "...KYYYK....", "...KYKYKOO..", "...KYYYKOK..", "....KYYK....", "..KKYYYYKKK.", ".KYYYYYYYYK.", ".KYYYYYYYYK.", "..KYYYYYYK..", "...KKKKKK...", "............"};
+static const char *const NIGHT_LIGHT[12] = {"............", "....KKKK....", "...KYYYYK...", "..KYYKKYK...", "..KYYK..K...", "..KYYK......", "..KYYYKK....", "...KYYYYK...", "....KKKK....", "....KSSK....", "...KSSSSK...", "...KKKKKK..."};
+static const char *const COWBOY_HAT[12] = {"............", "............", "............", "....KKKK....", "...KBBBBK...", "..KBBBBBBK..", "..KBDDDDBK..", "KKKBBBBBBKKK", "KBBBBBBBBBBK", ".KKKKKKKKKK.", "............", "............"};
+static const char *const FLOWER_CROWN[12] = {"............", "............", "............", "............", "............", "..K...K...K.", ".KPK.KYK.KPK", "KPYPKYOYKPYP", ".KPK.KYK.KPK", "GGGGGGGGGGGG", "KKKKKKKKKKKK", "............"};
+static const char *const LAVA_LAMP[12] = {"....KKKK....", "....KSSK....", "...KLLLLK...", "...KLRRLK...", "..KLLRRLLK..", "..KLLLLRLK..", "..KLRRLLLK..", "..KLRRLLLK..", "...KLLLLK...", "...KSSSSK...", "..KSSSSSSK..", "..KKKKKKKK.."};
+static const char *const PAINTING[12] = {"KKKKKKKKKKKK", "KYYYYYYYYYYK", "KYLLLLLLLLYK", "KYLLLLLYYLYK", "KYLLLLLYYLYK", "KYLLGLLLLLYK", "KYLGGGLLGLYK", "KYGGGGGGGGYK", "KYGGGGGGGGYK", "KYYYYYYYYYYK", "KKKKKKKKKKKK", "............"};
+static const char *const CACTUS[12] = {".....KK.....", "....KGGK....", "....KGGK.KK.", ".KK.KGGK.KGK", "KGK.KGGKKGGK", "KGGKKGGKGGK.", ".KGGGGGGGK..", "..KKKGGKKK..", "...KKKKKK...", "...KOOOOK...", "...KOOOOK...", "....KKKK...."};
+static const char *const SNOW_GLOBE[12] = {"...KKKKKK...", "..KLLLLLLK..", ".KLWLLLWLLK.", ".KLLLGLLLLK.", ".KLLGGGLWLK.", ".KLWGGGGLLK.", "..KLLDDLLK..", "...KKKKKK...", "..KBBBBBBK..", "..KBYBBYBK..", "..KKKKKKKK..", "............"};
+static const char *const RADIO[12] = {"..........K.", ".........K..", "KKKKKKKKKKKK", "KRRRRRRRRRRK", "KRKKKKRRSSRK", "KRKSSKRSKSRK", "KRKSSKRRSSRK", "KRKKKKRRRRRK", "KRRRRRRRRRRK", "KKKKKKKKKKKK", ".KK......KK.", "............"};
+static const char *const DINO[12] = {"......KKKK..", ".....KGGGGK.", ".....KGKGGK.", ".....KGGGGK.", ".....KGGKK..", "K...KGGGK...", "KGKKGGGGGK..", ".KGGGGGGK...", "..KGGGGGK...", "...KGKKGK...", "...KK..KK...", "............"};
+
 // --- math prizes and smarts ---
 static const char *const MINI_MATH[7] = {"KKKKKKK", "KLLLLLK", "KLWLWLK", "KLLWLLK", "KLWLWLK", "KLLLLLK", "KKKKKKK"};
 static const char *const MINI_BOOK[7] = {"KKKKKKK", "KLLKWWK", "KLLKWWK", "KLLKWWK", "KLLKWWK", "KKKKKKK", "......."};

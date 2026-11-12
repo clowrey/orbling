@@ -554,6 +554,7 @@ static void simulate(const char *label, std::vector<Session> sessions, int days,
 }
 
 int main(int argc, char **argv) {
+  setvbuf(stdout, nullptr, _IONBF, 0);  // nothing lost if a check aborts
   if (argc > 1) out_dir = std::string(argv[1]) + "/";
   crc_init();
   PetEngine e;
@@ -669,14 +670,29 @@ int main(int argc, char **argv) {
   e.touch_up(now);
   e.loop(now);
   shot(e, "16a-shop", now);
-  tap(e, 268, 68, now);   // HATS tab
-  tap(e, 234, 152, now);  // pick the cap
+  e.state().coins = 400;
+  tap(e, 180, 80, now);   // HATS tab
+  tap(e, 180, 150, now);  // pick the cap
   shot(e, "16a2-shop-hats-picked", now);
-  tap(e, 234, 152, now);  // buy it
+  tap(e, 180, 150, now);  // buy it
+  tap(e, 180, 246, now);  // the cowboy hat (fifth: middle of the bottom row): pick, buy
+  tap(e, 180, 246, now);
+  tap(e, 120, 80, now);   // TOYS: the duck
+  tap(e, 180, 246, now);
+  tap(e, 180, 246, now);
+  tap(e, 240, 80, now);   // ROOM: lava lamp and dino
+  tap(e, 96, 150, now);
+  tap(e, 96, 150, now);
+  tap(e, 264, 246, now);
+  tap(e, 264, 246, now);
+  shot(e, "16a25-shop-room", now);
+  printf("shop: cowboy %d duck %d lava %d dino %d, coins left %d\n", e.owns(IT_COWBOY_HAT), e.owns(IT_DUCK),
+         e.owns(IT_LAVA_LAMP), e.owns(IT_DINO), e.coins());
+  if (!e.owns(IT_COWBOY_HAT) || !e.owns(IT_DUCK) || !e.owns(IT_LAVA_LAMP) || !e.owns(IT_DINO)) abort();
   e.state().owned |= 1u << IT_TROPHY;  // as if won
   e.give(IT_GOLD_APPLE);
-  tap(e, 282, 68, now);    // PRIZE tab
-  tap(e, 126, 152, now);   // a locked prize: how to win it
+  tap(e, 300, 80, now);    // PRIZE tab
+  tap(e, 96, 150, now);    // a locked prize: how to win it
   shot(e, "16a3-shop-prizes", now);
   e.touch_down(300, 180, now);  // on to settings
   e.touch_move(120, 185);
@@ -849,7 +865,7 @@ int main(int argc, char **argv) {
   uint32_t t3 = 90000;
   tap(e, 300, 150, t3);
   int hats_shown = 0;
-  for (int id = 0; id < IT_COUNT && hats_shown < 12; id++) {
+  for (int id = 0; id < IT_COUNT && hats_shown < 20; id++) {
     if (!is_hat(id)) continue;
     e.state().hat = (uint8_t) id;
     t3 += 6000;

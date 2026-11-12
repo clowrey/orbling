@@ -53,13 +53,19 @@ enum ItemId : uint8_t {
   IT_SNORKEL, IT_SAILOR_HAT, IT_FISHBOWL, IT_SHELL, IT_SODA, IT_SUSHI,                // Fizz: ocean
   IT_BERET, IT_FRUIT_HAT, IT_COOKIE_JAR, IT_TEAPOT, IT_DONUT, IT_PIZZA,               // Munch: bakery
   IT_SPACE_HELMET, IT_ALIEN_BAND, IT_TELESCOPE, IT_PLANET, IT_STAR_COOKIE, IT_ASTRO,  // Share: space
+  IT_STAND_END,
+  // More for the shop (kept ones are bits of SaveData::owned4).
+  IT_ICE_CREAM = IT_STAND_END, IT_BURGER,                                       // food
+  IT_DUCK, IT_NIGHT_LIGHT,                                                      // toys
+  IT_COWBOY_HAT, IT_FLOWER_CROWN,                                               // hats
+  IT_LAVA_LAMP, IT_PAINTING, IT_CACTUS, IT_SNOW_GLOBE, IT_RADIO, IT_DINO,      // the ROOM tab
   IT_COUNT
 };
 static const int PRIZE_COUNT = IT_GOLD_APPLE - IT_WIZARD_HAT + 1;
 static const int STAND_PAGE = 6;   // items on each math game's page of the prize stand
 static const int STAND_PAGES = 5;  // Quiz, Facts, Fizz, Munch, Share
-static_assert(IT_COUNT == IT_PROP_CAP + STAND_PAGE * STAND_PAGES, "stand pages");
-static_assert(IT_COUNT <= 48, "SaveData::owned, owned2 and owned3 hold 48 items");
+static_assert(IT_STAND_END == IT_PROP_CAP + STAND_PAGE * STAND_PAGES, "stand pages");
+static_assert(IT_COUNT <= 64, "SaveData::owned, owned2, owned3 and owned4 hold 64 items");
 // Hats drawn into the pet's sprite (shaped to its head) and hats drawn over it from their shop art.
 inline bool is_sprite_hat(int id) {
   return (id >= IT_BOW && id <= IT_PARTY_HAT) || id == IT_WIZARD_HAT || id == IT_CHEF_HAT || id == IT_PROP_CAP ||
@@ -67,7 +73,8 @@ inline bool is_sprite_hat(int id) {
 }
 inline bool is_overlay_hat(int id) {
   return id == IT_HEADPHONES || id == IT_GOGGLES || id == IT_SNORKEL || id == IT_SAILOR_HAT || id == IT_BERET ||
-         id == IT_FRUIT_HAT || id == IT_SPACE_HELMET || id == IT_ALIEN_BAND;
+         id == IT_FRUIT_HAT || id == IT_SPACE_HELMET || id == IT_ALIEN_BAND || id == IT_COWBOY_HAT ||
+         id == IT_FLOWER_CROWN;
 }
 inline bool is_hat(int id) { return is_sprite_hat(id) || is_overlay_hat(id); }
 inline bool is_treat(int id) {
@@ -75,10 +82,12 @@ inline bool is_treat(int id) {
          id == IT_DONUT || id == IT_PIZZA || id == IT_STAR_COOKIE || id == IT_ASTRO;
 }
 inline bool is_prize(int id) { return id >= IT_WIZARD_HAT && id <= IT_GOLD_APPLE; }  // won, never bought
-inline bool is_stand(int id) { return id >= IT_PROP_CAP && id < IT_COUNT; }          // bought after math games
-inline bool is_food(int id) { return id < IT_BALL || is_treat(id); }               // eaten, not kept
-// Things for the study shelf (on the right of the room).
-inline bool is_decor(int id) { return is_stand(id) && !is_hat(id) && !is_treat(id); }
+inline bool is_stand(int id) { return id >= IT_PROP_CAP && id < IT_STAND_END; }      // bought after math games
+inline bool is_food(int id) { return id < IT_BALL || is_treat(id) || id == IT_ICE_CREAM || id == IT_BURGER; }  // eaten
+// Things for the study shelf (on the right of the room): the stand's room things, the ROOM tab, the duck and light.
+inline bool is_decor(int id) {
+  return (is_stand(id) && !is_hat(id) && !is_treat(id)) || (id >= IT_DUCK && id < IT_COUNT && !is_hat(id));
+}
 
 // Adult forms, decided by how it was raised.
 enum Form : uint8_t { FORM_PLAIN, FORM_ROYAL, FORM_SCRUFFY, FORM_SPORTY, FORM_CHUBBY, FORM_WILD, FORM_BRAINY };
@@ -118,7 +127,8 @@ struct SaveData {
   uint16_t best_chant;    // Chant: most tables finished in one game (v9)
   // The Math need, kept as how much math it is missing (0 = full), so saves from before it start full (v10).
   uint8_t math_need;
-  uint8_t pad7[3];
+  uint8_t pad7;
+  uint16_t owned4;  // owned items 48-63: bit (id - 48) (v10)
 };
 
 enum GameKind : uint8_t {
@@ -235,15 +245,20 @@ class PetEngine {
   int grows_in_min() const;  // time together until the next stage (or the egg); -1 if none
   int coins() const { return s_.coins; }
   bool owns(int item) const {
-    return item < 16 ? (s_.owned >> item) & 1 : item < 32 ? (s_.owned2 >> (item - 16)) & 1 : (s_.owned3 >> (item - 32)) & 1;
+    return item < 16   ? (s_.owned >> item) & 1
+           : item < 32 ? (s_.owned2 >> (item - 16)) & 1
+           : item < 48 ? (s_.owned3 >> (item - 32)) & 1
+                       : (s_.owned4 >> (item - 48)) & 1;
   }
   void give(int item) {
     if (item < 16)
       s_.owned = (uint16_t) (s_.owned | (1u << item));
     else if (item < 32)
       s_.owned2 = (uint16_t) (s_.owned2 | (1u << (item - 16)));
-    else
+    else if (item < 48)
       s_.owned3 = (uint16_t) (s_.owned3 | (1u << (item - 32)));
+    else
+      s_.owned4 = (uint16_t) (s_.owned4 | (1u << (item - 48)));
   }
   // Someone touched it in the last 5 minutes: needs run fast. Otherwise it dozes and they run slow.
   bool is_active(uint32_t now_ms) const;

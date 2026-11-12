@@ -56,11 +56,26 @@ static const ShopItem SHOP[IT_COUNT] = {
     {"Teapot", 14, art::TEAPOT, 12},     {"Donut", 5, art::DONUT, 12},       {"Pizza", 7, art::PIZZA, 12},
     {"Helmet", 20, art::SPACE_HELMET, 12}, {"Alien", 15, art::ALIEN_BAND, 12}, {"Scope", 20, art::TELESCOPE, 12},
     {"Planet", 16, art::PLANET, 12},     {"Cookie", 5, art::STAR_COOKIE, 12}, {"Astro", 6, art::ASTRO, 12},
+    // the shop's second row: food, toys, hats, and the ROOM tab
+    {"Cone", 6, art::ICE_CREAM, 12},     {"Burger", 9, art::BURGER, 12},
+    {"Duck", 25, art::DUCK, 12},         {"Light", 30, art::NIGHT_LIGHT, 12},
+    {"Cowboy", 20, art::COWBOY_HAT, 12}, {"Flower", 18, art::FLOWER_CROWN, 12},
+    {"Lava", 22, art::LAVA_LAMP, 12},    {"Art", 30, art::PAINTING, 12},       {"Cactus", 15, art::CACTUS, 12},
+    {"Snow", 20, art::SNOW_GLOBE, 12},   {"Radio", 25, art::RADIO, 12},        {"Dino", 18, art::DINO, 12},
 };
 // The prize stand page for each math game, in GameKind order from GAME_QUIZ.
 static const char *const STAND_TITLE[STAND_PAGES] = {"CLASSROOM", "GADGETS", "OCEAN", "BAKERY", "SPACE"};
 static const uint32_t STAND_BOARD[STAND_PAGES] = {0x234536, 0x2E2350, 0x1E3A5A, 0x4A2E22, 0x14183A};
-static const char *const SHOP_TABS[4] = {"FOOD", "TOYS", "HATS", "PRIZE"};
+static const int SHOP_TAB_COUNT = 5, SHOP_PRIZE_TAB = 4;
+static const char *const SHOP_TABS[SHOP_TAB_COUNT] = {"FOOD", "TOYS", "HATS", "ROOM", "PRIZE"};
+// Six things on each tab.
+static const uint8_t SHOP_TAB_ITEMS[SHOP_TAB_COUNT][6] = {
+    {IT_CAKE, IT_STEAK, IT_JUICE, IT_CANDY, IT_ICE_CREAM, IT_BURGER},
+    {IT_BALL, IT_TEDDY, IT_PLANT, IT_BED, IT_DUCK, IT_NIGHT_LIGHT},
+    {IT_BOW, IT_CAP, IT_GLASSES, IT_PARTY_HAT, IT_COWBOY_HAT, IT_FLOWER_CROWN},
+    {IT_LAVA_LAMP, IT_PAINTING, IT_CACTUS, IT_SNOW_GLOBE, IT_RADIO, IT_DINO},
+    {IT_WIZARD_HAT, IT_TROPHY, IT_ROCKET, IT_OWL, IT_CHEF_HAT, IT_GOLD_APPLE},
+};
 // How each prize is won (shown on the PRIZE tab).
 static const char *const PRIZE_HOW[PRIZE_COUNT] = {"10/10 in Quiz", "20 in Facts", "15 in Fizz",
                                                    "Smarts 60",     "15 in Munch", "25 in Munch"};
@@ -666,6 +681,7 @@ void PetEngine::hatch_new_egg(uint32_t seed, bool inherit) {
   s_.owned = old.owned;
   s_.owned2 = old.owned2;
   s_.owned3 = old.owned3;
+  s_.owned4 = old.owned4;
   s_.chant_medals = old.chant_medals;
   s_.best_chant = old.best_chant;
   s_.coins = first ? 20 : old.coins;
@@ -920,6 +936,7 @@ void PetEngine::tick_minute(int mod, bool active) {
     // Mornings it gets up once rested; a daytime nap lasts until the bolt is nearly full.
     s_.asleep = 0;
     s_.lights_on = 1;
+    if (owns(IT_NIGHT_LIGHT)) add(s_.happy, 20);  // slept well with its night light on
     show_toast("Good morning!", 3000);
   }
 
@@ -2077,6 +2094,7 @@ bool PetEngine::clean_up() {
   clean_poops_ = s_.poops;
   s_.poops = 0;
   s_.clean = 100;
+  if (owns(IT_DUCK)) add(s_.happy, 15);  // bath time with the duck
   set_activity(ACT_CLEAN, 2200);
   dirty_ = true;
   return true;
@@ -3255,6 +3273,14 @@ void PetEngine::food_effect(int id) {
       add(s_.happy, 20);
       add(s_.energy, 10);
       break;
+    case IT_ICE_CREAM:
+      add(s_.happy, 25);
+      add(s_.food, 5);
+      break;
+    case IT_BURGER:
+      add(s_.food, 45);
+      s_.weight = (uint8_t) (s_.weight + 2);
+      break;
     default:  // candy
       add(s_.happy, 10);
       break;
@@ -3318,26 +3344,20 @@ bool PetEngine::buy(int id) {
   return true;
 }
 
-static const int SHOP_TAB_Y = 68, SHOP_ROW1 = 152, SHOP_ROW2 = 254, SHOP_R = 46;
-static int shop_tab_x(int t) { return 78 + t * 68; }
+static const int SHOP_TAB_Y = 80, SHOP_ROW1 = 152, SHOP_ROW2 = 254, SHOP_R = 46;
+static int shop_tab_x(int t) { return 60 + t * 60; }
 // Food, toys and hats: four big circles. Prizes: six smaller ones, three across.
-static int shop_count(int tab) { return tab == 3 ? PRIZE_COUNT : 4; }
-static int shop_item(int tab, int i) { return tab == 3 ? IT_WIZARD_HAT + i : tab * 4 + i; }
-static void shop_slot(int tab, int i, int &x, int &y, int &r) {
-  if (tab == 3) {
-    x = 96 + (i % 3) * 84;
-    y = i / 3 ? 246 : 150;
-    r = 39;
-  } else {
-    x = i % 2 ? 234 : 126;
-    y = i / 2 ? SHOP_ROW2 : SHOP_ROW1;
-    r = SHOP_R;
-  }
+static int shop_count(int) { return 6; }
+static int shop_item(int tab, int i) { return SHOP_TAB_ITEMS[tab][i]; }
+static void shop_slot(int, int i, int &x, int &y, int &r) {  // every tab: three across, two rows
+  x = 96 + (i % 3) * 84;
+  y = i / 3 ? 246 : 150;
+  r = 39;
 }
 
 void PetEngine::shop_tap(int x, int y) {
-  for (int t = 0; t < 4; t++)
-    if (abs(x - shop_tab_x(t)) < 34 && abs(y - SHOP_TAB_Y) < 18) {
+  for (int t = 0; t < SHOP_TAB_COUNT; t++)
+    if (abs(x - shop_tab_x(t)) < 30 && abs(y - SHOP_TAB_Y) < 18) {
       shop_tab_ = (uint8_t) t;
       shop_sel_ = -1;
       return;
@@ -3347,7 +3367,7 @@ void PetEngine::shop_tap(int x, int y) {
     shop_slot(shop_tab_, i, sx, sy, sr);
     if (sq(x - sx) + sq(y - sy) > (sr + 4) * (sr + 4)) continue;
     int id = shop_item(shop_tab_, i);
-    bool kept = id >= IT_BALL;
+    bool kept = !is_food(id);
     if (kept && owns(id)) {  // hats: wear / take off; toys: already there
       buy(id);
     } else if (is_prize(id)) {  // locked: show how to win it
@@ -3374,10 +3394,10 @@ void PetEngine::draw_shop(Canvas &c, uint32_t now) {
   icon(c, art::COIN, 7, 180 - w / 2, 22, 3);
   text(c, 180 - w / 2 + 26, 22, buf, 3, 0xFFD23F, false);
   // tabs
-  for (int t = 0; t < 4; t++) {
+  for (int t = 0; t < SHOP_TAB_COUNT; t++) {
     int tx = shop_tab_x(t);
     bool on = t == shop_tab_;
-    rect(c, tx - 32, SHOP_TAB_Y - 14, 64, 28, on ? 0xFFD23F : (t == 3 ? 0x4A3D20 : 0x3D3350));
+    rect(c, tx - 29, SHOP_TAB_Y - 14, 58, 28, on ? 0xFFD23F : (t == SHOP_PRIZE_TAB ? 0x4A3D20 : 0x3D3350));
     text(c, tx, SHOP_TAB_Y - 7, SHOP_TABS[t], 2, on ? 0x2B2233 : 0xC9C2E8, true, false);
   }
   // items
@@ -3386,7 +3406,7 @@ void PetEngine::draw_shop(Canvas &c, uint32_t now) {
     int id = shop_item(shop_tab_, i), sx, sy, sr;
     shop_slot(shop_tab_, i, sx, sy, sr);
     const ShopItem &it = SHOP[id];
-    bool picked = sel_live && shop_sel_ == id, have = id >= IT_BALL && owns(id), worn = s_.hat == id && have;
+    bool picked = sel_live && shop_sel_ == id, have = !is_food(id) && owns(id), worn = s_.hat == id && have;
     circle(c, sx, sy, sr + 3, picked ? 0xFFD23F : 0x2B2233);
     circle(c, sx, sy, sr, worn ? 0xD8F0C8 : 0xFFF6E0);
     bool locked = is_prize(id) && !have;
@@ -3414,6 +3434,7 @@ void PetEngine::draw_shop(Canvas &c, uint32_t now) {
   const char *hint = shop_tab_ == 0   ? "food is eaten now"
                      : shop_tab_ == 1 ? "toys help it out"
                      : shop_tab_ == 2 ? "tap owned: wear"
+                     : shop_tab_ == 3 ? "for its shelf"
                                       : "win them in math";
   if (sel_live && is_prize(shop_sel_)) {
     snprintf(buf, sizeof(buf), "Win: %s", PRIZE_HOW[shop_sel_ - IT_WIZARD_HAT]);

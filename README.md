@@ -76,7 +76,7 @@ Assistant it takes the time and time zone from there. Without Home Assistant it 
 | Tap the gauges at the top | Stats page |
 | Swipe up from the bottom edge | Home: back to the pet from any page, menu or game (a game's points still count) |
 | Swipe left / right | Pet → stats → shop → settings → times tables pages (the times tables are also one swipe right from the pet); tap the stats page to go back |
-| Shop page | Coins at the top; tabs for food, toys and hats; tap an item twice to buy it, tap an owned hat to wear it |
+| Shop page | Coins at the top; tabs for food, toys, hats and room things, six of each; tap an item twice to buy it, tap an owned hat to wear it |
 | Settings page | Sound on/off, brightness (4 levels), **New egg** (hold 2 s; replaces the pet) |
 | Hold anywhere after it is gone | Hatch a new egg |
 
@@ -246,11 +246,16 @@ to the next pet.
 | | Steak | 8 | food +50, weight +1 |
 | | Juice | 10 | energy +40, happiness +5 |
 | | Candy | 4 | happiness +10 |
+| | Ice cream cone | 6 | happiness +25, food +5 |
+| | Burger | 9 | food +45, weight +2 |
 | Toys | Ball | 25 | it bounces it now and then; happiness drops slower |
 | | Teddy | 30 | it cuddles it while it sleeps or dozes; no sadness then |
 | | Plant | 20 | sits by it; cleanliness drops half as fast |
 | | Bed | 40 | it sleeps in it; naps twice as fast |
-| Hats | Bow, Cap, Specs, Party hat | 15–25 | worn on the pet; tap again to take off (a hat hides a crown) |
+| | Rubber duck | 25 | bath time is fun: cleaning up also gives happiness +15 |
+| | Night light | 30 | it sleeps well: happiness +20 when it wakes up in the morning |
+| Hats | Bow, Cap, Specs, Party hat, Cowboy hat, Flower crown | 15–25 | worn on the pet; tap again to take off (a hat hides a crown) |
+| Room | Lava lamp, Painting, Cactus, Snow globe, Radio, Toy dino | 15–30 | for the shelf in its room (with the duck and the night light) |
 
 Food is eaten on the spot (it switches to the pet page to watch).
 

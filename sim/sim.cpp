@@ -941,8 +941,8 @@ int main(int argc, char **argv) {
   }
 
   printf("\nOther games, autoplay scores (5 runs each) by bot skill:\n");
-  static const char *const GAME_NAMES[GAME_COUNT] = {"jump", "catch", "pop",   "copy",  "quiz",
-                                                     "facts", "fizz",  "munch", "share", "chant"};
+  static const char *const GAME_NAMES[GAME_COUNT] = {"jump", "catch", "pop",   "copy",  "quiz",  "facts", "fizz",
+                                                     "munch", "share", "chant", "whack", "match", "stack"};
   for (int kind = GAME_CATCH; kind < GAME_CHANT; kind++)  // Chant has its own test
     for (float skill : {0.6f, 0.85f, 0.97f}) {
       printf("  %-5s skill %.2f:", GAME_NAMES[kind], skill);
@@ -954,6 +954,61 @@ int main(int argc, char **argv) {
       }
       printf("\n");
     }
+
+  {  // The FUN games, played by simple bots: Whack taps what's up (not bombs), Match remembers every card, Stack
+     // drops when the block is lined up (within a few px, or sloppy).
+    for (int kind : {GAME_WHACK, GAME_MATCH, GAME_STACK}) {
+      prep(e, 40 + kind, STAGE_ADULT);
+      e.state().energy = 100;
+      uint32_t t = 9000000u + kind * 1000000u;  // later than any earlier step's clock
+      e.loop(t);
+      e.start_game(kind);
+      e.loop(t);
+      if (kind == GAME_WHACK) shot(e, "23a-whack-ready", t);
+      tap(e, 180, 330, t);
+      bool shot_taken = false;
+      for (int step = 0; step < 4000 && e.in_game() && !e.run_over(); step++) {
+        t += 30;
+        e.loop(t);
+        if (kind == GAME_WHACK && step % 4 == 0) {
+          for (int i = 0; i < 9; i++)
+            if (e.whack_hole(i) == 1 || e.whack_hole(i) == 2) {
+              tap(e, 180 + (i % 3 - 1) * 92, 184 + (i / 3 - 1) * 82, t);
+              break;
+            }
+        } else if (kind == GAME_MATCH && step % 10 == 0) {
+          int a = -1, b = -1;
+          for (int i = 0; i < 12 && b < 0; i++)
+            for (int j = i + 1; j < 12 && e.match_state(i) == 0; j++)
+              if (e.match_state(j) == 0 && e.match_card(i) == e.match_card(j)) {
+                a = i;
+                b = j;
+                break;
+              }
+          if (a >= 0) {
+            tap(e, 180 + (int) ((a % 4 - 1.5f) * 68), 118 + (a / 4) * 70, t);
+            tap(e, 180 + (int) ((b % 4 - 1.5f) * 68), 118 + (b / 4) * 70, t);
+          }
+        } else if (kind == GAME_STACK && fabsf(e.stack_offset()) < (e.run_score() < 12 ? 3 : 9)) {
+          tap(e, 180, 180, t);
+        }
+        if (!shot_taken && t > 9000000u + kind * 1000000u + 9000) {
+          shot(e, kind == GAME_WHACK ? "23b-whack" : kind == GAME_MATCH ? "23c-match" : "23d-stack", t);
+          shot_taken = true;
+        }
+      }
+      printf("%s bot: score %d\n", kind == GAME_WHACK ? "whack" : kind == GAME_MATCH ? "match" : "stack", e.run_score());
+    }
+    prep(e, 3, STAGE_ADULT);
+    uint32_t t = 30000000u;
+    e.loop(t);
+    e.open_games();
+    e.loop(t);
+    shot(e, "23e-menu-fun", t);
+    tap(e, 228, 74, t);
+    shot(e, "23f-menu-math", t);
+    contact_sheet("fun", 3, "23");
+  }
 
   {  // Facts: the right answer typed with sloppy taps (up to 15 degrees and 20 px off a digit) always counts
     prep(e, 8, STAGE_ADULT);

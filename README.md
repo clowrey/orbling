@@ -101,7 +101,8 @@ if nobody steps in), and its **Smarts** fade: slowly while Math is under 25, fas
 lights off?" when the bolt gets low). In the dark the bolt fills from empty in 1 minute (2 with the light on); a
 daytime nap ends by itself when it is full, or when you turn the light back on.
 
-**Play** opens a menu of ten games; the last six are math games (times tables and division). The score sets how much happier it gets (up to +35); every game costs
+**Play** opens the game menu: a **FUN** tab (Jump, Catch, Pop, Copy, Whack, Match, Stack) and a **MATH** tab
+(Quiz, Facts, Fizz, Munch, Share, Chant: times tables and division). The score sets how much happier it gets (up to +35); every game costs
 energy, Jump and Catch burn a little weight, and each game keeps its best score.
 
 ![games](docs/games.png)
@@ -115,6 +116,16 @@ energy, Jump and Catch burn a little weight, and each game keeps its best score.
 - **Pop**: 30 seconds to tap bubbles before they float away. Red spiky ones cost 3 points; bubbles get quicker.
 - **Copy**: four coloured pads light up (each with its own note); tap them back in the same order. One more step
   each round.
+- **Whack**: critters pop out of nine holes; tap them before they duck back down (gold ones are worth 3). From
+  score 5 some are bombs: tapping one costs 3. 30 seconds, and they come quicker as the score goes up.
+- **Match**: twelve cards, six pairs. Flip two at a time; a pair stays face up, two that don't match turn back.
+  Clear the board and a new one is dealt; one point per pair in 60 seconds.
+- **Stack**: a block slides across; tap to drop it on the tower. Whatever hangs over the edge falls off, so the
+  blocks get narrower; drop it right on top and it keeps its width. It speeds up with every block, and a block
+  that misses the tower ends the game.
+
+![fun games](docs/fun.png)
+
 - **Quiz** (times tables): "7 x 8 = ?" with four answers to tap, 10 questions, 20 seconds each. A right answer
   turns green; a wrong one turns red and the right one lights up, with the whole fact underneath. The wrong
   answers are the tempting ones (a neighbouring row or column, or one off). Questions start with the easy tables
@@ -328,7 +339,7 @@ Some JC3636W518 boards have a PDM microphone instead; if Chant never hears anyth
 
 Sensors: Food, Happiness, Energy, Cleanliness, Math, Health, Discipline, Time together (h), Grows up in (min), Coins,
 Weight, Care mistakes, Generation, Smarts, Best jump run, Best catch, Best pop, Best copy, Best quiz, Best facts,
-Best fizz, Best munch, Best share, Best chant, Times table medals. Text: Pet name, Species, Stage, Mood, Parent.
+Best fizz, Best munch, Best share, Best chant, Best whack, Best match, Best stack, Times table medals. Text: Pet name, Species, Stage, Mood, Parent.
 Binary: Needs attention, Sick, Asleep, Tantrum.
 Buttons: Feed meal, Feed snack, Clean up, Give medicine, Toggle light, Scold, Hatch new egg.
 Switches: Sound, Audio output, Chant voice (the mic in Chant), and the Backlight light.

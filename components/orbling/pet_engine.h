@@ -129,13 +129,15 @@ struct SaveData {
   uint8_t math_need;
   uint8_t pad7;
   uint16_t owned4;  // owned items 48-63: bit (id - 48) (v10)
+  uint16_t best_whack, best_match, best_stack, pad8;  // the FUN games added with them (v11)
 };
 
 enum GameKind : uint8_t {
   GAME_JUMP, GAME_CATCH, GAME_POP, GAME_COPY, GAME_QUIZ, GAME_FACTS, GAME_FIZZ, GAME_MUNCH, GAME_SHARE, GAME_CHANT,
+  GAME_WHACK, GAME_MATCH, GAME_STACK,  // more FUN games (no math)
   GAME_COUNT
 };
-inline bool is_math_game(int kind) { return kind >= GAME_QUIZ && kind < GAME_COUNT; }
+inline bool is_math_game(int kind) { return kind >= GAME_QUIZ && kind <= GAME_CHANT; }
 // Quiz-style games: ten questions, four answers to tap.
 inline bool is_quiz_like(int kind) { return kind == GAME_QUIZ || kind == GAME_SHARE; }
 
@@ -149,6 +151,7 @@ static const size_t SAVE_V6_SIZE = 84;  // before smarts, Fizz and Munch
 static const size_t SAVE_V7_SIZE = 92;  // before the division game
 static const size_t SAVE_V8_SIZE = 96;  // before Chant
 static const size_t SAVE_V9_SIZE = 100;  // before the Math need
+static const size_t SAVE_V10_SIZE = 104;  // before Whack, Match and Stack
 static_assert(offsetof(SaveData, best_run) == SAVE_V1_SIZE, "v1 fields must stay where they were");
 static_assert(offsetof(SaveData, discipline) == SAVE_V2_SIZE, "v2 fields must stay where they were");
 static_assert(offsetof(SaveData, best_catch) == SAVE_V3_SIZE, "v3 fields must stay where they were");
@@ -158,7 +161,8 @@ static_assert(offsetof(SaveData, best_fizz) == SAVE_V6_SIZE, "v6 fields must sta
 static_assert(offsetof(SaveData, best_share) == SAVE_V7_SIZE, "v7 fields must stay where they were");
 static_assert(offsetof(SaveData, chant_medals) == SAVE_V8_SIZE, "v8 fields must stay where they were");
 static_assert(offsetof(SaveData, math_need) == SAVE_V9_SIZE, "v9 fields must stay where they were");
-static_assert(sizeof(SaveData) == 104, "save size");
+static_assert(offsetof(SaveData, best_whack) == SAVE_V10_SIZE, "v10 fields must stay where they were");
+static_assert(sizeof(SaveData) == 112, "save size");
 
 // Growth by time together (seconds of SaveData::together_s) at which each stage starts, and when an elder
 // sets off and leaves an egg.
@@ -422,6 +426,18 @@ class PetEngine {
   void chant_update();
   void draw_chant(Canvas &c, uint32_t now);
   void draw_mic_status(Canvas &c, uint32_t now, int y);
+  // FUN games: Whack, Match, Stack
+  void whack_update();
+  void whack_press(int x, int y);
+  void draw_whack(Canvas &c, uint32_t now);
+  void match_deal();
+  void match_update();
+  void match_press(int x, int y);
+  void draw_match(Canvas &c, uint32_t now);
+  void stack_start();
+  void stack_update(float dt);
+  void stack_press();
+  void draw_stack(Canvas &c, uint32_t now);
   void food_effect(int id);  // what eating a food item does (bought, or a Chant gift)
 
   SaveData s_{};
@@ -476,6 +492,34 @@ class PetEngine {
   uint32_t ch_wrong_ms_{0}, ch_ok_ms_{0}, ch_gift_ms_{0}, ch_heard_ms_{0}, ch_err_until_{0};
   bool listening_{false}, thinking_{false}, voice_link_{false};
   char ch_heard_[44]{};       // what speech-to-text last heard (or a voice error), shown small
+  uint8_t games_tab_{0};      // the game menu's tab: 0 FUN, 1 MATH
+  // Whack
+  struct Mole {
+    uint8_t kind;   // 0 none, 1 critter, 2 gold, 3 bomb
+    bool hit;
+    uint16_t life;  // ms it stays up
+    uint32_t t;     // when it came up (or was hit)
+  };
+  Mole whack_[9]{};
+  // Match
+  uint8_t match_card_[12]{}, match_state_[12]{};  // which pair; 0 face down, 1 up, 2 found
+  int8_t match_a_{-1}, match_b_{-1};
+  uint8_t match_left_{0};
+  uint32_t match_flip_ms_{0};
+  // Stack: the top 16 rows (a ring), and the moving block
+  float stack_bx_[16]{}, stack_bw_[16]{};
+  uint16_t stack_n_{0};
+  float stack_x_{0}, stack_w_{0}, stack_dir_{1}, stack_speed_{0};
+  uint32_t stack_fall_ms_{0};
+
+ public:
+  // For the simulator's players.
+  int whack_hole(int i) const { return whack_[i].kind && !whack_[i].hit ? whack_[i].kind : 0; }
+  int match_card(int i) const { return match_card_[i]; }
+  int match_state(int i) const { return match_state_[i]; }
+  float stack_offset() const { return stack_n_ ? stack_x_ - stack_bx_[(stack_n_ - 1) % 16] : 0; }
+
+ private:
   Overlay overlay_{OV_NONE};
   uint32_t overlay_since_{0};
   Activity act_{ACT_IDLE};

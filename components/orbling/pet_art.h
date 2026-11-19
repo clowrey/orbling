@@ -149,6 +149,11 @@ static const char *const SNOW_GLOBE[12] = {"...KKKKKK...", "..KLLLLLLK..", ".KLW
 static const char *const RADIO[12] = {"..........K.", ".........K..", "KKKKKKKKKKKK", "KRRRRRRRRRRK", "KRKKKKRRSSRK", "KRKSSKRSKSRK", "KRKSSKRRSSRK", "KRKKKKRRRRRK", "KRRRRRRRRRRK", "KKKKKKKKKKKK", ".KK......KK.", "............"};
 static const char *const DINO[12] = {"......KKKK..", ".....KGGGGK.", ".....KGKGGK.", ".....KGGGGK.", ".....KGGKK..", "K...KGGGK...", "KGKKGGGGGK..", ".KGGGGGGK...", "..KGGGGGK...", "...KGKKGK...", "...KK..KK...", "............"};
 
+// --- the FUN games' menu icons ---
+static const char *const MOLE_ICON[12] = {"............", "....KKKK....", "...KBBBBK...", "..KBWBBWBK..", "..KBKBBKBK..", "..KBBPPBBK..", "..KBBBBBBK..", ".KKKKKKKKKK.", "KDDDDDDDDDDK", "KDDDDDDDDDDK", ".KKKKKKKKKK.", "............"};
+static const char *const CARDS_ICON[12] = {"............", "KKKKKK......", "KLLLLK......", "KLWWLKKKKKK.", "KLWWLKCCCCK.", "KLLLLKCRRCK.", "KLLLLKCRRCK.", "KKKKKKCCCCK.", ".....KCCCCK.", ".....KKKKKK.", "............", "............"};
+static const char *const STACK_ICON[12] = {"............", "....KKKK....", "....KRRK....", "...KKKKKKK..", "...KYYYYYK..", "..KKKKKKKK..", "..KGGGGGGK..", ".KKKKKKKKKK.", ".KLLLLLLLLK.", ".KKKKKKKKKK.", "............", "............"};
+
 // --- math prizes and smarts ---
 static const char *const MINI_MATH[7] = {"KKKKKKK", "KLLLLLK", "KLWLWLK", "KLLWLLK", "KLWLWLK", "KLLLLLK", "KKKKKKK"};
 static const char *const MINI_BOOK[7] = {"KKKKKKK", "KLLKWWK", "KLLKWWK", "KLLKWWK", "KLLKWWK", "KKKKKKK", "......."};

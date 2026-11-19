@@ -1019,6 +1019,35 @@ int main(int argc, char **argv) {
     tap(e, 228, 74, t);
     shot(e, "23f-menu-math", t);
     contact_sheet("fun", 4, "23");
+    // CHILL: open each from the menu's third tab, let it run, then a tap and random touches (checked canvas).
+    for (int k = 0; k < 3; k++) {
+      prep(e, 60 + k, STAGE_ADULT);
+      e.state().energy = 100;
+      t += 1000;
+      e.loop(t);
+      e.state().discipline = 100;  // calm and willing, so it doesn't refuse to play
+      e.state().tantrum = 0;
+      bool menu = e.open_games();
+      tap(e, 260, 72, t);                    // the CHILL tab
+      if (k == 0) shot(e, "24a-menu-chill", t);
+      tap(e, 98 + k * 82, 170, t);           // LIFE, JULIA, BALLS
+      for (int i = 0; i < 300; i++) {        // 6 seconds
+        t += 20;
+        e.loop(t);
+      }
+      static const char *const N[3] = {"24b-life", "24c-julia", "24d-balls"};
+      shot(e, N[k], t);
+      tap(e, 180, 160, t);
+      for (int i = 0; i < 150; i++) {
+        t += 20;
+        e.loop(t);
+      }
+      shot(e, (std::string(N[k]) + "-tapped").c_str(), t);
+      printf("chill %d: menu %d, open %d (asleep %d sick %d energy %d)\n", k, (int) menu, (int) e.in_relax(), (int) e.is_asleep(), (int) e.is_sick(), e.energy());
+      if (!e.in_relax()) abort();
+    }
+    contact_sheet("chill", 4, "24");
+
   }
 
   {  // Facts: the right answer typed with sloppy taps (up to 15 degrees and 20 px off a digit) always counts

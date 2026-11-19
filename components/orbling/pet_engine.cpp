@@ -1141,6 +1141,7 @@ void PetEngine::loop(uint32_t now) {
     show_toast("A new egg!", 3000);
   }
   if ((overlay_ == OV_FEED || overlay_ == OV_GAMES) && now - overlay_since_ > 10000) overlay_ = OV_NONE;
+  if (overlay_ == OV_RELAX) relax_update(dt);
   if (overlay_ == OV_STAND && now - overlay_since_ > 30000) overlay_ = OV_NONE;
   if (overlay_ == OV_GAME) {
     if (run_phase_ == RUN_READY && now - run_t_ > 15000) {
@@ -1218,6 +1219,7 @@ void PetEngine::loop(uint32_t now) {
 
 int PetEngine::wanted_fps() const {
   if (overlay_ == OV_GAME) return 25;
+  if (overlay_ == OV_RELAX) return 20;
   if (page_ == PAGE_TABLES && (pressed_ || tables_animating(now_))) return 25;  // smooth while dragging
   if (!s_.lights_on && !pressed_ && (now_ - last_user_ > 20000 || last_user_ == 0)) return 2;
   if (is_dozing(now_) && !pressed_) return 4;
@@ -1227,6 +1229,7 @@ int PetEngine::wanted_fps() const {
 float PetEngine::backlight(uint32_t now) const {
   static const float LEVELS[4] = {0.3f, 0.55f, 0.8f, 1.0f};
   float on = LEVELS[brightness_level()];
+  if (overlay_ == OV_RELAX && s_.lights_on) return on;  // a screensaver: it stays bright while you watch
   bool recent = last_user_ != 0 && now - last_user_ < 20000;
   if (!s_.lights_on) return recent ? fminf(0.6f, on) : 0.1f;  // a touch in the dark lights it up for a while
   if (is_dozing(now)) return fmaxf(0.12f, on * 0.35f);       // dim while it dozes
@@ -1490,13 +1493,13 @@ static const uint8_t MENU_GAMES[2][9] = {
     {GAME_JUMP, GAME_CATCH, GAME_POP, GAME_COPY, GAME_WHACK, GAME_MATCH, GAME_STACK, GAME_FLAP, GAME_BRICKS},
     {GAME_QUIZ, GAME_FACTS, GAME_FIZZ, GAME_MUNCH, GAME_SHARE, GAME_CHANT, 255, 255, 255},
 };
-static int menu_count(int tab) { return tab == 0 ? 9 : 6; }
+static int menu_count(int tab) { return tab == 0 ? 9 : tab == 1 ? 6 : 3; }  // FUN, MATH, CHILL
 static void menu_pos(int tab, int i, int &x, int &y) {
   int rows = (menu_count(tab) + 2) / 3;
-  y = rows == 3 ? 128 + (i / 3) * 74 : 136 + (i / 3) * 84;
+  y = rows == 3 ? 128 + (i / 3) * 74 : rows == 2 ? 136 + (i / 3) * 84 : 170;
   x = 180 + (i % 3 - 1) * 82;
 }
-static int menu_tab_x(int t) { return t ? 228 : 132; }
+static int menu_tab_x(int t) { return 100 + t * 80; }
 // Facts keypad: the ten digits round the edge like a rotary dial (0 at the top, then 1 to 9 clockwise), and
 // delete and skip as two buttons in the middle, away from the digits so a missed digit can't skip the question.
 // A touch anywhere in the outer ring counts for the digit it is nearest by angle (each has 36 degrees).
@@ -2252,6 +2255,11 @@ void PetEngine::touch_down(int x, int y, uint32_t now) {
   tt_drag_y_ = (int16_t) y;
   tt_lock_ = 0;
   tt_dragged_ = false;
+  if (overlay_ == OV_RELAX && page_ == 0) {  // CHILL: a touch plays with the simulation
+    game_touch_ = true;
+    relax_press(x, y);
+    return;
+  }
   if (overlay_ == OV_GAME && page_ == 0) {
     game_touch_ = true;
     game_press(x, y);
@@ -2387,8 +2395,8 @@ void PetEngine::tap(int x, int y) {
   }
   if (overlay_ == OV_GAMES) {
     overlay_since_ = now_;
-    for (int t = 0; t < 2; t++)
-      if (abs(x - menu_tab_x(t)) < 46 && abs(y - MENU_TAB_Y) < 20) {
+    for (int t = 0; t < 3; t++)
+      if (abs(x - menu_tab_x(t)) < 39 && abs(y - MENU_TAB_Y) < 20) {
         games_tab_ = (uint8_t) t;
         return;
       }
@@ -2396,7 +2404,10 @@ void PetEngine::tap(int x, int y) {
       int gx, gy;
       menu_pos(games_tab_, i, gx, gy);
       if (sq(x - gx) + sq(y - gy) < (MENU_R + 4) * (MENU_R + 4)) {
-        start_game(MENU_GAMES[games_tab_][i]);
+        if (games_tab_ == 2)
+          open_relax(i);
+        else
+          start_game(MENU_GAMES[games_tab_][i]);
         return;
       }
     }
@@ -2628,6 +2639,11 @@ void PetEngine::draw_sky(Canvas &c, uint32_t now) {
 }
 
 void PetEngine::draw_scene(Canvas &c, uint32_t now) {
+  if (overlay_ == OV_RELAX) {
+    g_dim = 1.0f;
+    draw_relax(c, now);
+    return;
+  }
   g_dim = s_.lights_on ? 1.0f : 0.32f;
   draw_sky(c, now);
 
@@ -2980,12 +2996,12 @@ void PetEngine::draw_games_menu(Canvas &c) {
   circle(c, 180, 180, 168, 0x2B2233);
   circle(c, 180, 180, 164, 0xFFF6E0);
   text(c, 180, 30, "PLAY", 3, 0x2B2233, true, false);
-  static const char *const TABS[2] = {"FUN", "MATH"};
-  for (int t = 0; t < 2; t++) {
+  static const char *const TABS[3] = {"FUN", "MATH", "CHILL"};
+  for (int t = 0; t < 3; t++) {
     bool on = t == games_tab_;
     int tx = menu_tab_x(t);
-    rect(c, tx - 42, MENU_TAB_Y - 15, 84, 30, 0x2B2233);
-    rect(c, tx - 40, MENU_TAB_Y - 13, 80, 26, on ? 0xFFD23F : 0xE8DFC8);
+    rect(c, tx - 37, MENU_TAB_Y - 15, 74, 30, 0x2B2233);
+    rect(c, tx - 35, MENU_TAB_Y - 13, 70, 26, on ? 0xFFD23F : 0xE8DFC8);
     text(c, tx, MENU_TAB_Y - 7, TABS[t], 2, 0x2B2233, true, false);
   }
   static const char *const NAMES[GAME_COUNT] = {"JUMP",  "CATCH", "POP",   "COPY",  "QUIZ",  "FACTS", "FIZZ",
@@ -2993,6 +3009,22 @@ void PetEngine::draw_games_menu(Canvas &c) {
                                                 "BRICK"};
   static const uint32_t BG[GAME_COUNT] = {0xD8F0C8, 0xFFE3B0, 0xCFE8FF, 0xF3D6FF, 0xC8F0E0, 0xFFF0B0, 0xC8F0E0, 0xFFF0B0,
                                           0xC8E0FF, 0xFFD8E8, 0xD8F0C8, 0xCFE8FF, 0xFFE3B0, 0xCFE8FF, 0xF3D6FF};
+  if (games_tab_ == 2) {  // CHILL: simulations to watch, no score
+    static const char *const CHILL[3] = {"LIFE", "JULIA", "BALLS"};
+    static const char *const *const CHILL_ICON[3] = {art::LIFE_ICON, art::JULIA_ICON, art::BALLS_ICON};
+    static const uint32_t CHILL_BG[3] = {0xD8E8FF, 0xF0D8FF, 0xFFE8D0};
+    for (int i = 0; i < 3; i++) {
+      int gx, gy;
+      menu_pos(2, i, gx, gy);
+      circle(c, gx, gy, MENU_R + 3, 0x2B2233);
+      circle(c, gx, gy, MENU_R, CHILL_BG[i]);
+      icon(c, CHILL_ICON[i], 12, gx - 12, gy - 30, 2);
+      text(c, gx, gy - 2, CHILL[i], 2, 0x2B2233, true, false);
+    }
+    text(c, 180, 240, "just watch, or", 2, 0x8A80A0, true, false);
+    text(c, 180, 260, "tap to stir it up", 2, 0x8A80A0, true, false);
+    return;
+  }
   for (int i = 0; i < menu_count(games_tab_); i++) {
     int kind = MENU_GAMES[games_tab_][i], gx, gy;
     menu_pos(games_tab_, i, gx, gy);
@@ -4110,6 +4142,324 @@ void PetEngine::draw_bricks(Canvas &c, uint32_t now) {
   rect(c, px - BR_PADDLE_W / 2, BR_PADDLE_Y, BR_PADDLE_W, 10, 0x1A1426);
   rect(c, px - BR_PADDLE_W / 2 + 2, BR_PADDLE_Y + 2, BR_PADDLE_W - 4, 6, 0x4AA8FF);
   draw_game_hud(c, now, "Break the bricks!", "drag the paddle", "3 balls");
+}
+
+// --- CHILL: three relaxing simulations, no score. Swipe up from the bottom to leave. ---
+// Life: Conway's Game of Life on a 60x60 grid of 6 px cells, only inside the circle. The rim joins the opposite
+// side (a cell's neighbour just past the edge is the cell just inside it diametrically opposite, as on a
+// projective plane), so a glider leaving at the top comes back in at the bottom. Cells brighten when born and
+// deepen as they age; dead cells fade out. A pattern that has settled into a loop is reseeded.
+// Julia: the Julia set of z^2 + c with c going slowly round a circle, coloured by escape time with the colours
+// flowing. Balls: forty balls in a round drum, gravity slowly turning round the circle.
+
+static const int LIFE_N = 60, LIFE_CELL = 6;
+static bool life_inside(int x, int y) {
+  float dx = x - 29.5f, dy = y - 29.5f;
+  return dx * dx + dy * dy <= 29.0f * 29.0f;
+}
+// The cell on the far side of the rim for a neighbour (x, y) outside the disc: its mirror through the centre,
+// stepped in towards the centre until it is inside.
+static int life_wrap(int x, int y) {
+  float mx = 59 - x, my = 59 - y;
+  for (int i = 0; i < 6 && !(mx >= 0 && my >= 0 && mx < LIFE_N && my < LIFE_N && life_inside((int) mx, (int) my));
+       i++) {
+    mx += (29.5f - mx) * 0.12f;
+    my += (29.5f - my) * 0.12f;
+  }
+  int ix = (int) lroundf(mx), iy = (int) lroundf(my);
+  if (ix < 0) ix = 0;
+  if (iy < 0) iy = 0;
+  if (ix >= LIFE_N) ix = LIFE_N - 1;
+  if (iy >= LIFE_N) iy = LIFE_N - 1;
+  return iy * LIFE_N + ix;
+}
+
+void PetEngine::life_seed(int cx, int cy, int radius, int percent) {
+  for (int y = cy - radius; y <= cy + radius; y++)
+    for (int x = cx - radius; x <= cx + radius; x++) {
+      if (x < 0 || y < 0 || x >= LIFE_N || y >= LIFE_N || !life_inside(x, y)) continue;
+      if ((int) (rnd() % 100) < percent) life_[y * LIFE_N + x] = 1;
+    }
+}
+
+void PetEngine::life_step() {
+  uint32_t hash = 2166136261u;
+  int pop = 0;
+  for (int y = 0; y < LIFE_N; y++)
+    for (int x = 0; x < LIFE_N; x++) {
+      int i = y * LIFE_N + x;
+      if (!life_inside(x, y)) {
+        life_next_[i] = 0;
+        continue;
+      }
+      int n = 0;
+      for (int dy = -1; dy <= 1; dy++)
+        for (int dx = -1; dx <= 1; dx++) {
+          if (!dx && !dy) continue;
+          int nx = x + dx, ny = y + dy;
+          int j = (nx >= 0 && ny >= 0 && nx < LIFE_N && ny < LIFE_N && life_inside(nx, ny)) ? ny * LIFE_N + nx
+                                                                                             : life_wrap(nx, ny);
+          n += life_[j] != 0;
+        }
+      uint8_t age = life_[i];
+      uint8_t next = (age && (n == 2 || n == 3)) ? (uint8_t) (age < 255 ? age + 1 : 255) : (!age && n == 3) ? 1 : 0;
+      life_next_[i] = next;
+      if (age && !next) life_fade_[i] = 14;  // a trail where it died
+      else if (life_fade_[i]) life_fade_[i]--;
+      if (next) {
+        pop++;
+        hash = (hash ^ (uint32_t) i) * 16777619u;
+      }
+    }
+  memcpy(life_, life_next_, sizeof(life_));
+  // Settled into a loop (or nearly empty)? Seed a fresh soup after a short while.
+  bool seen = false;
+  for (uint32_t h : life_hash_) seen |= h == hash;
+  life_hash_[life_hi_++ % 12] = hash;
+  life_still_ = (seen || pop < 12) ? (uint16_t) (life_still_ + 1) : 0;
+  if (life_still_ > 40) {
+    life_seed(30, 30, 30, 32);
+    life_still_ = 0;
+  }
+}
+
+static uint32_t life_color(uint8_t age) {
+  if (age <= 1) return 0xFFFFFF;
+  if (age < 6) return mix(0xFFFFFF, 0x5CE1E6, (age - 1) / 5.0f);
+  if (age < 30) return mix(0x5CE1E6, 0x6C7BFF, (age - 6) / 24.0f);
+  return mix(0x6C7BFF, 0xC86CFF, fminf(1.0f, (age - 30) / 60.0f));
+}
+
+void PetEngine::draw_life(Canvas &c) {
+  rect(c, 0, 0, SCREEN, SCREEN, 0x0A0818);
+  for (int y = 0; y < LIFE_N; y++) {
+    int x = 0;
+    while (x < LIFE_N) {  // runs of the same colour, one rectangle each
+      int i = y * LIFE_N + x;
+      uint32_t col = life_[i] ? life_color(life_[i]) : life_fade_[i] ? mix(0x0A0818, 0x3A2A6A, life_fade_[i] / 14.0f)
+                                                                     : 0x0A0818;
+      int run = 1;
+      while (x + run < LIFE_N) {
+        int j = i + run;
+        uint32_t c2 = life_[j] ? life_color(life_[j]) : life_fade_[j] ? mix(0x0A0818, 0x3A2A6A, life_fade_[j] / 14.0f)
+                                                                       : 0x0A0818;
+        if (c2 != col) break;
+        run++;
+      }
+      if (col != 0x0A0818) rect(c, x * LIFE_CELL, y * LIFE_CELL, run * LIFE_CELL - 1, LIFE_CELL - 1, col);
+      x += run;
+    }
+  }
+}
+
+// Julia: 120x120 escape times (3 px blocks), recomputed a few rows a frame while the colours flow every frame.
+static const int JUL_N = 120, JUL_MAX = 48;
+// c goes round just inside the edge of the Mandelbrot set's main cardioid: there the Julia sets stay in one piece,
+// full of spirals and curls, and change shape all the way round.
+static void julia_c(float a, float &cr, float &ci) {
+  cr = 0.985f * (0.5f * cosf(a) - 0.25f * cosf(2 * a));
+  ci = 0.985f * (0.5f * sinf(a) - 0.25f * sinf(2 * a));
+}
+void PetEngine::julia_rows(int count) {
+  for (int k = 0; k < count; k++) {
+    int y = jul_row_;
+    float ci = jul_ci_, cr = jul_cr_;
+    for (int x = 0; x < JUL_N; x++) {
+      float dx = x - 59.5f, dy = y - 59.5f;
+      if (dx * dx + dy * dy > 60.0f * 60.0f) {
+        jul_[y * JUL_N + x] = 255;  // outside the screen
+        continue;
+      }
+      float zr = dx / 59.5f * 1.3f, zi = dy / 59.5f * 1.3f;
+      int it = 0;
+      while (it < JUL_MAX && zr * zr + zi * zi < 4.0f) {
+        float t = zr * zr - zi * zi + cr;
+        zi = 2 * zr * zi + ci;
+        zr = t;
+        it++;
+      }
+      if (it == JUL_MAX) {  // inside the set: shade by where z ended up, for a soft texture
+        int k = (int) ((zr * zr + zi * zi) * 40);
+        jul_[y * JUL_N + x] = (uint8_t) (200 + (k > 40 ? 40 : k));
+      } else {
+        jul_[y * JUL_N + x] = (uint8_t) it;
+      }
+    }
+    if (++jul_row_ >= JUL_N) {  // a full picture: move c on round its circle
+      jul_row_ = 0;
+      jul_a_ += 0.035f;
+      julia_c(jul_a_, jul_cr_, jul_ci_);
+    }
+  }
+}
+
+void PetEngine::draw_julia(Canvas &c, uint32_t now) {
+  rect(c, 0, 0, SCREEN, SCREEN, 0x05040C);
+  float shift = now / 1500.0f;
+  for (int y = 0; y < JUL_N; y++) {
+    int x = 0;
+    while (x < JUL_N) {
+      uint8_t v = jul_[y * JUL_N + x];
+      int run = 1;
+      while (x + run < JUL_N && jul_[y * JUL_N + x + run] == v) run++;
+      if (v >= 200 && v < 255) {  // inside the set
+        float k = (v - 200) / 40.0f;
+        rect(c, x * 3, y * 3, run * 3, 3, mix(0x140A30, mix(0x2A1A6A, 0x1E5A7A, 0.5f + 0.5f * sinf(shift * 0.6f)), k));
+      } else if (v != 255 && v > 2 && v < JUL_MAX) {
+        // A rainbow that flows with time; only the slow-escaping edges near the set are bright, the rest stays dark.
+        float h = v * 0.32f + shift;
+        float bright = fminf(1.0f, (v - 2) / 10.0f);
+        int r = (int) (255 * bright * (0.5f + 0.5f * sinf(h)));
+        int g = (int) (255 * bright * (0.5f + 0.5f * sinf(h + 2.1f)));
+        int b = (int) (255 * bright * (0.5f + 0.5f * sinf(h + 4.2f)));
+        rect(c, x * 3, y * 3, run * 3, 3, (uint32_t) (r << 16 | g << 8 | b));
+      }
+      x += run;
+    }
+  }
+}
+
+// Balls in a round drum.
+static const float DRUM_R = 172;
+void PetEngine::balls_reset() {
+  static const uint32_t COLS[8] = {0xF0454B, 0xFF9A3C, 0xFFD23F, 0x5BD46B, 0x2EC4B6, 0x4AA8FF, 0xA66CFF, 0xFF7EB0};
+  for (int i = 0; i < BALL_COUNT; i++) {
+    Ball &b = balls_[i];
+    b.r = 9 + (float) (rnd() % 7);
+    float a = (rnd() % 628) / 100.0f, d = (float) (rnd() % 120);
+    b.x = 180 + cosf(a) * d;
+    b.y = 180 + sinf(a) * d;
+    b.vx = (float) ((int) (rnd() % 120) - 60);
+    b.vy = (float) ((int) (rnd() % 120) - 60);
+    b.col = COLS[i % 8];
+  }
+  g_angle_ = 1.5708f;  // gravity starts pointing down
+}
+
+void PetEngine::balls_step(float dt) {
+  g_angle_ += 0.12f * dt;  // gravity turns slowly round the drum
+  float gx = cosf(g_angle_) * 260, gy = sinf(g_angle_) * 260;
+  for (int i = 0; i < BALL_COUNT; i++) {
+    Ball &b = balls_[i];
+    b.vx = (b.vx + gx * dt) * 0.999f;
+    b.vy = (b.vy + gy * dt) * 0.999f;
+    b.x += b.vx * dt;
+    b.y += b.vy * dt;
+    float dx = b.x - 180, dy = b.y - 180, d = sqrtf(dx * dx + dy * dy), lim = DRUM_R - b.r;
+    if (d > lim && d > 0) {  // the wall: push back in and bounce
+      float nx = dx / d, ny = dy / d;
+      b.x = 180 + nx * lim;
+      b.y = 180 + ny * lim;
+      float vn = b.vx * nx + b.vy * ny;
+      if (vn > 0) {
+        b.vx -= 1.8f * vn * nx;
+        b.vy -= 1.8f * vn * ny;
+      }
+    }
+  }
+  for (int i = 0; i < BALL_COUNT; i++)
+    for (int j = i + 1; j < BALL_COUNT; j++) {
+      Ball &a = balls_[i], &b = balls_[j];
+      float dx = b.x - a.x, dy = b.y - a.y, rr = a.r + b.r, d2 = dx * dx + dy * dy;
+      if (d2 >= rr * rr || d2 < 0.0001f) continue;
+      float d = sqrtf(d2), nx = dx / d, ny = dy / d, overlap = rr - d;
+      float ma = a.r * a.r, mb = b.r * b.r, tot = ma + mb;  // heavier = bigger
+      a.x -= nx * overlap * mb / tot;
+      a.y -= ny * overlap * mb / tot;
+      b.x += nx * overlap * ma / tot;
+      b.y += ny * overlap * ma / tot;
+      float rel = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
+      if (rel < 0) {
+        float imp = -1.85f * rel / tot;  // a little bounce lost each time
+        a.vx -= imp * mb * nx;
+        a.vy -= imp * mb * ny;
+        b.vx += imp * ma * nx;
+        b.vy += imp * ma * ny;
+      }
+    }
+}
+
+void PetEngine::draw_balls(Canvas &c) {
+  rect(c, 0, 0, SCREEN, SCREEN, 0x0E0C1E);
+  circle(c, 180, 180, 176, 0x1C1838);
+  circle(c, 180, 180, 172, 0x12102A);
+  // a small arrow on the rim shows which way is "down"
+  circle(c, 180 + (int) (cosf(g_angle_) * 165), 180 + (int) (sinf(g_angle_) * 165), 4, 0x4A4470);
+  for (int i = 0; i < BALL_COUNT; i++) {
+    const Ball &b = balls_[i];
+    int r = (int) b.r;
+    circle(c, (int) b.x, (int) b.y, r, mix(b.col, 0x000000, 0.35f));
+    circle(c, (int) b.x - 1, (int) b.y - 1, r - 2, b.col);
+    circle(c, (int) (b.x - b.r * 0.35f), (int) (b.y - b.r * 0.35f), r / 4 + 1, mix(b.col, 0xFFFFFF, 0.7f));
+  }
+}
+
+void PetEngine::open_relax(int kind) {
+  overlay_ = OV_RELAX;
+  relax_kind_ = (uint8_t) kind;
+  relax_t_ = relax_t0_ = now_;
+  if (kind == 0) {
+    memset(life_, 0, sizeof(life_));
+    memset(life_fade_, 0, sizeof(life_fade_));
+    life_seed(30, 30, 30, 32);
+    life_still_ = 0;
+  } else if (kind == 1) {
+    jul_row_ = 0;
+    jul_a_ = (rnd() % 628) / 100.0f;
+    julia_c(jul_a_, jul_cr_, jul_ci_);
+    julia_rows(JUL_N);  // the first picture at once
+  } else {
+    balls_reset();
+  }
+}
+
+void PetEngine::relax_update(uint32_t dt) {
+  if (relax_kind_ == 0) {
+    if (now_ - relax_t_ >= 180) {  // about five generations a second
+      relax_t_ = now_;
+      life_step();
+    }
+  } else if (relax_kind_ == 1) {
+    julia_rows(12);
+  } else {
+    float left = dt / 1000.0f;
+    while (left > 0) {
+      float step = fminf(left, 0.008f);
+      balls_step(step);
+      left -= step;
+    }
+  }
+}
+
+void PetEngine::relax_press(int x, int y) {
+  if (relax_kind_ == 0) {
+    life_seed(x / LIFE_CELL, y / LIFE_CELL, 3, 55);  // a burst of cells under the finger
+  } else if (relax_kind_ == 1) {
+    jul_a_ += 0.9f;  // a different shape
+    julia_c(jul_a_, jul_cr_, jul_ci_);
+    jul_row_ = 0;
+    julia_rows(JUL_N);
+  } else {
+    for (int i = 0; i < BALL_COUNT; i++) {  // a push away from the finger
+      Ball &b = balls_[i];
+      float dx = b.x - x, dy = b.y - y, d = sqrtf(dx * dx + dy * dy);
+      if (d < 110 && d > 0.5f) {
+        float k = (110 - d) / 110 * 700;
+        b.vx += dx / d * k;
+        b.vy += dy / d * k;
+      }
+    }
+  }
+}
+
+void PetEngine::draw_relax(Canvas &c, uint32_t now) {
+  if (relax_kind_ == 0)
+    draw_life(c);
+  else if (relax_kind_ == 1)
+    draw_julia(c, now);
+  else
+    draw_balls(c);
+  if (now - relax_t0_ < 4000) text(c, 180, 318, "swipe up to leave", 1, 0x8A80B0, true, false);
 }
 
 // --- Times-table page ---

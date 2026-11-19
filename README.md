@@ -130,6 +130,20 @@ energy, Jump and Catch burn a little weight, and each game keeps its best score.
 
 ![fun games](docs/fun.png)
 
+The menu's third tab, **CHILL**, has three relaxing simulations to watch, with no score and no energy cost
+(the screen stays bright while one is open; swipe up from the bottom to leave):
+
+- **Life**: Conway's Game of Life inside the circle. The rim joins the opposite side (a cell's neighbour just past
+  the edge is the one just inside the far side, like a projective plane), so a glider leaving at the top comes
+  back in at the bottom. New cells flash white, older ones deepen to blue and violet, and dead ones leave a fading
+  trail. When it settles into a loop it reseeds itself; tap to drop a burst of cells.
+- **Julia**: the Julia set of z^2 + c, with c going slowly round a circle so the fractal keeps changing shape, and
+  colours flowing through it. Tap for a different shape.
+- **Balls**: forty balls tumbling in a round drum. Gravity slowly turns round the circle (the dot on the rim shows
+  which way is down); the balls bounce off the wall and each other. Tap to push them away from your finger.
+
+![chill](docs/chill.png)
+
 - **Quiz** (times tables): "7 x 8 = ?" with four answers to tap, 10 questions, 20 seconds each. A right answer
   turns green; a wrong one turns red and the right one lights up, with the whole fact underneath. The wrong
   answers are the tempting ones (a neighbouring row or column, or one off). Questions start with the easy tables

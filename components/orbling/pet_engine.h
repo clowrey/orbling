@@ -337,7 +337,7 @@ class PetEngine {
 
  private:
   enum Activity : uint8_t { ACT_IDLE, ACT_EAT, ACT_HAPPY, ACT_REFUSE, ACT_CLEAN, ACT_HATCH, ACT_SULK };
-  enum Overlay : uint8_t { OV_NONE, OV_FEED, OV_GAME, OV_GAMES, OV_STAND };
+  enum Overlay : uint8_t { OV_NONE, OV_FEED, OV_GAME, OV_GAMES, OV_STAND, OV_RELAX };
   enum RunPhase : uint8_t { RUN_READY, RUN_GO, RUN_OVER };
   enum CopyState : uint8_t { COPY_SHOW, COPY_INPUT, COPY_PAUSE };
 
@@ -451,6 +451,18 @@ class PetEngine {
   void bricks_serve();
   void bricks_update(float dt);
   void draw_bricks(Canvas &c, uint32_t now);
+  // CHILL: Life, Julia, Balls
+  void life_seed(int cx, int cy, int radius, int percent);
+  void life_step();
+  void draw_life(Canvas &c);
+  void julia_rows(int count);
+  void draw_julia(Canvas &c, uint32_t now);
+  void balls_reset();
+  void balls_step(float dt);
+  void draw_balls(Canvas &c);
+  void relax_update(uint32_t dt);
+  void relax_press(int x, int y);
+  void draw_relax(Canvas &c, uint32_t now);
   void food_effect(int id);  // what eating a food item does (bought, or a Chant gift)
 
   SaveData s_{};
@@ -535,6 +547,23 @@ class PetEngine {
   bool ball_held_{true};
   float ball_x_{0}, ball_y_{0}, ball_vx_{0}, ball_vy_{0}, ball_speed_{0}, paddle_x_{180};
   uint32_t serve_ms_{0};
+  // CHILL
+  uint8_t relax_kind_{0};  // 0 Life, 1 Julia, 2 Balls
+  uint32_t relax_t_{0}, relax_t0_{0};
+  uint8_t life_[60 * 60]{}, life_next_[60 * 60]{}, life_fade_[60 * 60]{};  // age (0 dead), next, trail
+  uint32_t life_hash_[12]{};
+  uint8_t life_hi_{0};
+  uint16_t life_still_{0};
+  uint8_t jul_[120 * 120]{};
+  uint16_t jul_row_{0};
+  float jul_a_{0}, jul_cr_{0}, jul_ci_{0};
+  static const int BALL_COUNT = 40;
+  struct Ball {
+    float x, y, vx, vy, r;
+    uint32_t col;
+  };
+  Ball balls_[BALL_COUNT]{};
+  float g_angle_{0};
 
  public:
   // For the simulator's players.
@@ -555,6 +584,8 @@ class PetEngine {
     return flap_gap_[best];
   }
   float ball_x() const { return ball_x_; }
+  void open_relax(int kind);  // CHILL: 0 Life, 1 Julia, 2 Balls
+  bool in_relax() const { return overlay_ == OV_RELAX; }
 
  private:
   Overlay overlay_{OV_NONE};

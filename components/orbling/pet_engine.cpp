@@ -678,6 +678,8 @@ void PetEngine::hatch_new_egg(uint32_t seed, bool inherit) {
   s_.best_whack = old.best_whack;
   s_.best_match = old.best_match;
   s_.best_stack = old.best_stack;
+  s_.best_flap = old.best_flap;
+  s_.best_bricks = old.best_bricks;
   s_.smarts_x10 = inherit ? (uint16_t) (old.smarts_x10 / 4) : 0;  // a head start from a clever parent
   s_.settings = old.settings;
   s_.brightness = old.brightness;
@@ -1154,6 +1156,16 @@ void PetEngine::loop(uint32_t now) {
         match_update();
       } else if (game_kind_ == GAME_STACK) {
         stack_update(dt / 1000.0f);
+      } else if (game_kind_ == GAME_FLAP || game_kind_ == GAME_BRICKS) {
+        float left = dt / 1000.0f;  // small fixed steps: collisions stay honest when a frame takes long
+        while (left > 0 && overlay_ == OV_GAME && run_phase_ == RUN_GO) {
+          float step = fminf(left, 0.016f);
+          if (game_kind_ == GAME_FLAP)
+            flap_update(step);
+          else
+            bricks_update(step);
+          left -= step;
+        }
       } else if (is_quiz_like(game_kind_) || game_kind_ == GAME_FACTS) {
         math_update();
       } else if (game_kind_ == GAME_FIZZ || game_kind_ == GAME_MUNCH) {
@@ -1359,6 +1371,8 @@ int PetEngine::best_score(int kind) const {
     case GAME_WHACK: return s_.best_whack;
     case GAME_MATCH: return s_.best_match;
     case GAME_STACK: return s_.best_stack;
+    case GAME_FLAP: return s_.best_flap;
+    case GAME_BRICKS: return s_.best_bricks;
     default: return s_.best_run;
   }
 }
@@ -1386,6 +1400,8 @@ void PetEngine::finish_game() {
                         : game_kind_ == GAME_WHACK ? &s_.best_whack
                         : game_kind_ == GAME_MATCH ? &s_.best_match
                         : game_kind_ == GAME_STACK ? &s_.best_stack
+                        : game_kind_ == GAME_FLAP ? &s_.best_flap
+                        : game_kind_ == GAME_BRICKS ? &s_.best_bricks
                                                   : &s_.best_run;
   bool best = sc > *best_slot;
   if (best) *best_slot = (uint16_t) sc;
@@ -1468,18 +1484,17 @@ static const uint32_t MUNCH_BANNER_MS = 2000;
 static const int QUIZ_X[4] = {125, 235, 125, 235}, QUIZ_Y[4] = {176, 176, 268, 268}, QUIZ_R = 42;
 static const uint32_t QUIZ_TIME_MS = 20000;  // per question
 
-// The game menu: two tabs, FUN and MATH, each in two rows (four over three, or three over three).
-static const int MENU_R = 34, MENU_TAB_Y = 74;
-static const uint8_t MENU_GAMES[2][7] = {
-    {GAME_JUMP, GAME_CATCH, GAME_POP, GAME_COPY, GAME_WHACK, GAME_MATCH, GAME_STACK},
-    {GAME_QUIZ, GAME_FACTS, GAME_FIZZ, GAME_MUNCH, GAME_SHARE, GAME_CHANT, 255},
+// The game menu: two tabs, FUN (three rows of three) and MATH (two rows of three).
+static const int MENU_R = 33, MENU_TAB_Y = 72;
+static const uint8_t MENU_GAMES[2][9] = {
+    {GAME_JUMP, GAME_CATCH, GAME_POP, GAME_COPY, GAME_WHACK, GAME_MATCH, GAME_STACK, GAME_FLAP, GAME_BRICKS},
+    {GAME_QUIZ, GAME_FACTS, GAME_FIZZ, GAME_MUNCH, GAME_SHARE, GAME_CHANT, 255, 255, 255},
 };
-static int menu_count(int tab) { return tab == 0 ? 7 : 6; }
+static int menu_count(int tab) { return tab == 0 ? 9 : 6; }
 static void menu_pos(int tab, int i, int &x, int &y) {
-  int n = menu_count(tab), top = (n + 1) / 2;  // 7: four then three; 6: three then three
-  int row = i < top ? 0 : 1, k = row ? n - top : top, j = row ? i - top : i;
-  y = row ? 220 : 136;
-  x = 180 + (int) ((j - (k - 1) / 2.0f) * 80);
+  int rows = (menu_count(tab) + 2) / 3;
+  y = rows == 3 ? 128 + (i / 3) * 74 : 136 + (i / 3) * 84;
+  x = 180 + (i % 3 - 1) * 82;
 }
 static int menu_tab_x(int t) { return t ? 228 : 132; }
 // Facts keypad: the ten digits round the edge like a rotary dial (0 at the top, then 1 to 9 clockwise), and
@@ -1564,6 +1579,15 @@ void PetEngine::game_press(int x, int y) {
       stack_start();
       return;
     }
+    if (game_kind_ == GAME_FLAP) {
+      flap_start();
+      return;
+    }
+    if (game_kind_ == GAME_BRICKS) {
+      bricks_start();
+      catch_target_ = (float) x;
+      return;
+    }
   }
   switch (game_kind_) {
     case GAME_JUMP:
@@ -1638,6 +1662,8 @@ void PetEngine::game_press(int x, int y) {
     case GAME_WHACK: whack_press(x, y); break;
     case GAME_MATCH: match_press(x, y); break;
     case GAME_STACK: stack_press(); break;
+    case GAME_FLAP: flap_press(); break;
+    case GAME_BRICKS: catch_target_ = (float) x; break;
     case GAME_QUIZ:
     case GAME_SHARE:
       if (feedback_ != 0) break;
@@ -2235,7 +2261,8 @@ void PetEngine::touch_down(int x, int y, uint32_t now) {
 void PetEngine::touch_move(int x, int y) {
   tx_ = x;
   ty_ = y;
-  if (overlay_ == OV_GAME && (game_kind_ == GAME_CATCH || game_kind_ == GAME_MUNCH) && pressed_)
+  if (overlay_ == OV_GAME && (game_kind_ == GAME_CATCH || game_kind_ == GAME_MUNCH || game_kind_ == GAME_BRICKS) &&
+      pressed_)
     catch_target_ = (float) x;  // drag to move
   if (page_ == PAGE_TABLES && overlay_ == OV_NONE && pressed_ && ty0_ <= HOME_SWIPE_Y) {
     int dx = x - tx0_, dy = y - ty0_;
@@ -2639,6 +2666,8 @@ void PetEngine::draw_scene(Canvas &c, uint32_t now) {
       case GAME_WHACK: draw_whack(c, now); break;
       case GAME_MATCH: draw_match(c, now); break;
       case GAME_STACK: draw_stack(c, now); break;
+      case GAME_FLAP: draw_flap(c, now); break;
+      case GAME_BRICKS: draw_bricks(c, now); break;
       default: draw_runner(c, now); break;
     }
     return;
@@ -2960,9 +2989,10 @@ void PetEngine::draw_games_menu(Canvas &c) {
     text(c, tx, MENU_TAB_Y - 7, TABS[t], 2, 0x2B2233, true, false);
   }
   static const char *const NAMES[GAME_COUNT] = {"JUMP",  "CATCH", "POP",   "COPY",  "QUIZ",  "FACTS", "FIZZ",
-                                                "MUNCH", "SHARE", "CHANT", "WHACK", "MATCH", "STACK"};
-  static const uint32_t BG[GAME_COUNT] = {0xD8F0C8, 0xFFE3B0, 0xCFE8FF, 0xF3D6FF, 0xC8F0E0, 0xFFF0B0, 0xC8F0E0,
-                                          0xFFF0B0, 0xC8E0FF, 0xFFD8E8, 0xD8F0C8, 0xCFE8FF, 0xFFE3B0};
+                                                "MUNCH", "SHARE", "CHANT", "WHACK", "MATCH", "STACK", "FLAP",
+                                                "BRICK"};
+  static const uint32_t BG[GAME_COUNT] = {0xD8F0C8, 0xFFE3B0, 0xCFE8FF, 0xF3D6FF, 0xC8F0E0, 0xFFF0B0, 0xC8F0E0, 0xFFF0B0,
+                                          0xC8E0FF, 0xFFD8E8, 0xD8F0C8, 0xCFE8FF, 0xFFE3B0, 0xCFE8FF, 0xF3D6FF};
   for (int i = 0; i < menu_count(games_tab_); i++) {
     int kind = MENU_GAMES[games_tab_][i], gx, gy;
     menu_pos(games_tab_, i, gx, gy);
@@ -2981,6 +3011,8 @@ void PetEngine::draw_games_menu(Canvas &c) {
       case GAME_WHACK: icon(c, art::MOLE_ICON, 12, gx - 12, gy - 30, 2); break;
       case GAME_MATCH: icon(c, art::CARDS_ICON, 12, gx - 12, gy - 30, 2); break;
       case GAME_STACK: icon(c, art::STACK_ICON, 12, gx - 12, gy - 30, 2); break;
+      case GAME_FLAP: icon(c, art::FLAP_ICON, 12, gx - 12, gy - 30, 2); break;
+      case GAME_BRICKS: icon(c, art::BRICKS_ICON, 12, gx - 12, gy - 30, 2); break;
       default: icon(c, art::DIVIDE, 12, gx - 12, gy - 30, 2); break;
     }
     text(c, gx, gy - 2, NAMES[kind], 2, 0x2B2233, true, false);
@@ -2988,7 +3020,7 @@ void PetEngine::draw_games_menu(Canvas &c) {
     snprintf(buf, sizeof(buf), "best %d", best_score(kind));
     text(c, gx, gy + 18, buf, 1, 0x6A6480, true, false);
   }
-  text(c, 180, 270, games_tab_ ? "math feeds the book" : "no math, just fun", 2, 0x8A80A0, true, false);
+  if (games_tab_) text(c, 180, 270, "math feeds the book", 2, 0x8A80A0, true, false);
 }
 
 void PetEngine::draw_catch(Canvas &c, uint32_t now) {
@@ -3881,6 +3913,203 @@ void PetEngine::draw_stack(Canvas &c, uint32_t now) {
     rect(c, (int) stack_x_ + 2, y + 2, (int) stack_w_ - 4, STACK_H - 6, stack_color(stack_n_));
   }
   draw_game_hud(c, now, "Stack it up!", "tap to drop", "line them up!");
+}
+
+// --- Flap: tap to flap the pet up; fly through the gaps between the pipes. One point per pipe. ---
+
+static const int FLAP_X = 118, FLAP_R = 16, FLAP_PIPE_W = 46, FLAP_TOP = 34, FLAP_BOTTOM = 318;
+
+void PetEngine::flap_start() {
+  flap_y_ = 170;
+  flap_vy_ = -260;
+  flap_speed_ = 105;
+  for (int i = 0; i < 3; i++) {
+    flap_px_[i] = 360 + i * 170;
+    flap_gap_[i] = (int16_t) (130 + rnd() % 110);
+  }
+  flap_scored_ = 0;
+}
+
+void PetEngine::flap_press() {
+  flap_vy_ = -290;
+  sound(SND_JUMP);
+}
+
+void PetEngine::flap_update(float dt) {
+  flap_vy_ += 900 * dt;
+  if (flap_vy_ > 420) flap_vy_ = 420;
+  flap_y_ += flap_vy_ * dt;
+  int gap = 128 - run_score_ * 2;
+  if (gap < 96) gap = 96;
+  for (int i = 0; i < 3; i++) {
+    flap_px_[i] -= flap_speed_ * dt;
+    if (flap_px_[i] < -FLAP_PIPE_W) {  // off the left: the next pipe, after the last one
+      float last = fmaxf(flap_px_[(i + 1) % 3], flap_px_[(i + 2) % 3]);
+      flap_px_[i] = last + 170;
+      flap_gap_[i] = (int16_t) (120 + rnd() % 130);
+      flap_scored_ &= (uint8_t) ~(1u << i);
+    }
+    bool over = FLAP_X + FLAP_R > flap_px_[i] + 4 && FLAP_X - FLAP_R < flap_px_[i] + FLAP_PIPE_W - 4;
+    if (over && (flap_y_ - FLAP_R + 4 < flap_gap_[i] - gap / 2 || flap_y_ + FLAP_R - 4 > flap_gap_[i] + gap / 2)) {
+      game_over(SND_CRASH);
+      return;
+    }
+    if (!(flap_scored_ & (1u << i)) && flap_px_[i] + FLAP_PIPE_W < FLAP_X - FLAP_R) {
+      flap_scored_ |= (uint8_t) (1u << i);
+      run_score_++;
+      flap_speed_ = fminf(190, flap_speed_ + 3);
+      sound(SND_POP);
+    }
+  }
+  if (flap_y_ > FLAP_BOTTOM || flap_y_ < FLAP_TOP) game_over(SND_CRASH);
+}
+
+void PetEngine::draw_flap(Canvas &c, uint32_t now) {
+  static Sprite sp;
+  for (int y = 0; y < SCREEN; y += 6) rect(c, 0, y, SCREEN, 6, mix(0x5EB8FF, 0xBDE8FF, y / 360.0f));
+  rect(c, 0, FLAP_BOTTOM + 8, SCREEN, SCREEN - FLAP_BOTTOM - 8, 0x5BAE4A);
+  int gap = 128 - run_score_ * 2;
+  if (gap < 96) gap = 96;
+  if (run_phase_ != RUN_READY)
+    for (int i = 0; i < 3; i++) {
+      int x = (int) flap_px_[i], top = flap_gap_[i] - gap / 2, bot = flap_gap_[i] + gap / 2;
+      rect(c, x, 0, FLAP_PIPE_W, top, 0x2B2233);
+      rect(c, x + 3, 0, FLAP_PIPE_W - 6, top - 3, 0x4CC25A);
+      rect(c, x - 4, top - 16, FLAP_PIPE_W + 8, 16, 0x2B2233);
+      rect(c, x - 1, top - 13, FLAP_PIPE_W + 2, 10, 0x6BDD78);
+      rect(c, x, bot, FLAP_PIPE_W, SCREEN - bot, 0x2B2233);
+      rect(c, x + 3, bot + 3, FLAP_PIPE_W - 6, SCREEN - bot, 0x4CC25A);
+      rect(c, x - 4, bot, FLAP_PIPE_W + 8, 16, 0x2B2233);
+      rect(c, x - 1, bot + 3, FLAP_PIPE_W + 2, 10, 0x6BDD78);
+    }
+  int py = run_phase_ == RUN_READY ? 170 + (int) (6 * sinf(now / 200.0f)) : (int) flap_y_;
+  build_pet(s_.g, s_.stage, s_.form, run_phase_ == RUN_OVER ? EX_DEAD : EX_HAPPY, 1, flap_vy_ < 0, false, sp, s_.hat);
+  blit(c, this, sp, FLAP_X - 32, py - 40, 2, false, &PetEngine::rect);
+  draw_overlay_hat(c, FLAP_X - 32, py - 40, 2);
+  draw_game_hud(c, now, "Flap through!", "tap to flap", "mind the pipes!");
+}
+
+// --- Bricks: drag the paddle along the bottom to keep the ball up and knock out the bricks. Three balls; a
+// cleared wall brings a new one and a faster ball. One point per brick. ---
+
+static const int BR_LEFT = 52, BR_RIGHT = 308, BR_TOP = 72, BR_PADDLE_Y = 290, BR_PADDLE_W = 72, BR_BALL_R = 6;
+static const int BR_COLS = 6, BR_ROWS = 4, BR_W = 40, BR_H = 15, BR_ROW0 = 96;
+static int brick_x(int col) { return 180 - BR_COLS * (BR_W + 2) / 2 + col * (BR_W + 2); }
+static int brick_y(int row) { return BR_ROW0 + row * (BR_H + 3); }
+
+void PetEngine::bricks_wall() {
+  for (int r = 0; r < BR_ROWS; r++)
+    for (int col = 0; col < BR_COLS; col++) brick_[r][col] = 1;
+  bricks_left_ = BR_ROWS * BR_COLS;
+}
+
+void PetEngine::bricks_serve() {
+  ball_held_ = true;
+  serve_ms_ = now_ + 700;
+  ball_x_ = paddle_x_;
+  ball_y_ = BR_PADDLE_Y - BR_BALL_R - 2;
+}
+
+void PetEngine::bricks_start() {
+  paddle_x_ = 180;
+  ball_speed_ = 190;
+  bricks_wall();
+  bricks_serve();
+}
+
+void PetEngine::bricks_update(float dt) {
+  float target = fminf(BR_RIGHT - BR_PADDLE_W / 2, fmaxf(BR_LEFT + BR_PADDLE_W / 2, catch_target_));
+  float step = 520 * dt;  // the paddle follows the finger quickly, but not in one jump
+  paddle_x_ += fmaxf(-step, fminf(step, target - paddle_x_));
+  if (ball_held_) {
+    ball_x_ = paddle_x_;
+    ball_y_ = BR_PADDLE_Y - BR_BALL_R - 2;
+    if ((int32_t) (now_ - serve_ms_) >= 0) {
+      ball_held_ = false;
+      ball_vx_ = (rnd() % 2 ? 0.45f : -0.45f) * ball_speed_;
+      ball_vy_ = -0.89f * ball_speed_;
+    }
+    return;
+  }
+  ball_x_ += ball_vx_ * dt;
+  ball_y_ += ball_vy_ * dt;
+  if (ball_x_ < BR_LEFT + BR_BALL_R) {
+    ball_x_ = BR_LEFT + BR_BALL_R;
+    ball_vx_ = fabsf(ball_vx_);
+  } else if (ball_x_ > BR_RIGHT - BR_BALL_R) {
+    ball_x_ = BR_RIGHT - BR_BALL_R;
+    ball_vx_ = -fabsf(ball_vx_);
+  }
+  if (ball_y_ < BR_TOP + BR_BALL_R) {
+    ball_y_ = BR_TOP + BR_BALL_R;
+    ball_vy_ = fabsf(ball_vy_);
+  }
+  // the paddle: where it hits sets the angle (the middle sends it straight up, the ends out wide)
+  if (ball_vy_ > 0 && ball_y_ + BR_BALL_R >= BR_PADDLE_Y && ball_y_ < BR_PADDLE_Y + 8 &&
+      fabsf(ball_x_ - paddle_x_) <= BR_PADDLE_W / 2 + BR_BALL_R) {
+    float off = (ball_x_ - paddle_x_) / (BR_PADDLE_W / 2.0f);
+    if (off > 1) off = 1;
+    if (off < -1) off = -1;
+    float a = off * 1.05f;  // up to about 60 degrees from straight up
+    ball_vx_ = sinf(a) * ball_speed_;
+    ball_vy_ = -cosf(a) * ball_speed_;
+    ball_y_ = BR_PADDLE_Y - BR_BALL_R;
+    sound(SND_KEY);
+  }
+  if (ball_y_ > BR_PADDLE_Y + 30) {  // missed
+    sound(SND_LOSE);
+    if (--lives_ == 0) {
+      game_over(SND_CRASH);
+      return;
+    }
+    bricks_serve();
+    return;
+  }
+  // bricks: one per step, bouncing off the side it came in from
+  for (int r = 0; r < BR_ROWS; r++)
+    for (int col = 0; col < BR_COLS; col++) {
+      if (!brick_[r][col]) continue;
+      float bx = (float) brick_x(col), by = (float) brick_y(r);
+      float nx = fmaxf(bx, fminf(ball_x_, bx + BR_W)), ny = fmaxf(by, fminf(ball_y_, by + BR_H));
+      float dx = ball_x_ - nx, dy = ball_y_ - ny;
+      if (dx * dx + dy * dy > BR_BALL_R * BR_BALL_R) continue;
+      brick_[r][col] = 0;
+      run_score_++;
+      sound(SND_POP);
+      if (fabsf(dx) > fabsf(dy))
+        ball_vx_ = -ball_vx_;
+      else
+        ball_vy_ = -ball_vy_;
+      if (--bricks_left_ == 0) {  // a new wall, a faster ball
+        ball_speed_ = fminf(340, ball_speed_ + 30);
+        bricks_wall();
+        bricks_serve();
+        sound(SND_GOAL);
+      }
+      return;
+    }
+}
+
+void PetEngine::draw_bricks(Canvas &c, uint32_t now) {
+  rect(c, 0, 0, SCREEN, SCREEN, 0x14183A);
+  rect(c, BR_LEFT - 3, BR_TOP - 3, BR_RIGHT - BR_LEFT + 6, 3, 0x3D3350);
+  rect(c, BR_LEFT - 3, BR_TOP - 3, 3, BR_PADDLE_Y - BR_TOP + 40, 0x3D3350);
+  rect(c, BR_RIGHT, BR_TOP - 3, 3, BR_PADDLE_Y - BR_TOP + 40, 0x3D3350);
+  static const uint32_t ROW_COL[BR_ROWS] = {0xF0454B, 0xFF9A3C, 0xFFD23F, 0x5BD46B};
+  if (run_phase_ != RUN_READY) {
+    for (int r = 0; r < BR_ROWS; r++)
+      for (int col = 0; col < BR_COLS; col++) {
+        if (!brick_[r][col]) continue;
+        rect(c, brick_x(col), brick_y(r), BR_W, BR_H, 0x1A1426);
+        rect(c, brick_x(col) + 2, brick_y(r) + 2, BR_W - 4, BR_H - 4, ROW_COL[r]);
+      }
+    circle(c, (int) ball_x_, (int) ball_y_, BR_BALL_R, 0xFFFFFF);
+    for (int i = 0; i < lives_; i++) circle(c, 160 + i * 20, 318, 5, 0xFF7EB0);
+  }
+  int px = run_phase_ == RUN_READY ? 180 : (int) paddle_x_;
+  rect(c, px - BR_PADDLE_W / 2, BR_PADDLE_Y, BR_PADDLE_W, 10, 0x1A1426);
+  rect(c, px - BR_PADDLE_W / 2 + 2, BR_PADDLE_Y + 2, BR_PADDLE_W - 4, 6, 0x4AA8FF);
+  draw_game_hud(c, now, "Break the bricks!", "drag the paddle", "3 balls");
 }
 
 // --- Times-table page ---

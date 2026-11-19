@@ -101,7 +101,7 @@ if nobody steps in), and its **Smarts** fade: slowly while Math is under 25, fas
 lights off?" when the bolt gets low). In the dark the bolt fills from empty in 1 minute (2 with the light on); a
 daytime nap ends by itself when it is full, or when you turn the light back on.
 
-**Play** opens the game menu: a **FUN** tab (Jump, Catch, Pop, Copy, Whack, Match, Stack) and a **MATH** tab
+**Play** opens the game menu: a **FUN** tab (Jump, Catch, Pop, Copy, Whack, Match, Stack, Flap, Bricks) and a **MATH** tab
 (Quiz, Facts, Fizz, Munch, Share, Chant: times tables and division). The score sets how much happier it gets (up to +35); every game costs
 energy, Jump and Catch burn a little weight, and each game keeps its best score.
 
@@ -123,6 +123,10 @@ energy, Jump and Catch burn a little weight, and each game keeps its best score.
 - **Stack**: a block slides across; tap to drop it on the tower. Whatever hangs over the edge falls off, so the
   blocks get narrower; drop it right on top and it keeps its width. It speeds up with every block, and a block
   that misses the tower ends the game.
+- **Flap**: tap to flap the pet up through the gaps between pipes; one point per pipe. The gaps get narrower
+  and the pipes faster as you go; touching a pipe, the ground or the top ends it.
+- **Bricks**: drag the paddle along the bottom to bounce the ball into a wall of bricks (one point each). Where
+  the ball hits the paddle sets its angle. Three balls; a cleared wall brings a new one and a faster ball.
 
 ![fun games](docs/fun.png)
 
@@ -339,7 +343,7 @@ Some JC3636W518 boards have a PDM microphone instead; if Chant never hears anyth
 
 Sensors: Food, Happiness, Energy, Cleanliness, Math, Health, Discipline, Time together (h), Grows up in (min), Coins,
 Weight, Care mistakes, Generation, Smarts, Best jump run, Best catch, Best pop, Best copy, Best quiz, Best facts,
-Best fizz, Best munch, Best share, Best chant, Best whack, Best match, Best stack, Times table medals. Text: Pet name, Species, Stage, Mood, Parent.
+Best fizz, Best munch, Best share, Best chant, Best whack, Best match, Best stack, Best flap, Best bricks, Times table medals. Text: Pet name, Species, Stage, Mood, Parent.
 Binary: Needs attention, Sick, Asleep, Tantrum.
 Buttons: Feed meal, Feed snack, Clean up, Give medicine, Toggle light, Scold, Hatch new egg.
 Switches: Sound, Audio output, Chant voice (the mic in Chant), and the Backlight light.

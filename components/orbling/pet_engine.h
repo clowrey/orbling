@@ -129,12 +129,14 @@ struct SaveData {
   uint8_t math_need;
   uint8_t pad7;
   uint16_t owned4;  // owned items 48-63: bit (id - 48) (v10)
-  uint16_t best_whack, best_match, best_stack, pad8;  // the FUN games added with them (v11)
+  uint16_t best_whack, best_match, best_stack;  // the FUN games added with them (v11)
+  uint16_t best_flap;                           // (v11; was padding, so zero before)
+  uint16_t best_bricks, pad9;                   // (v12)
 };
 
 enum GameKind : uint8_t {
   GAME_JUMP, GAME_CATCH, GAME_POP, GAME_COPY, GAME_QUIZ, GAME_FACTS, GAME_FIZZ, GAME_MUNCH, GAME_SHARE, GAME_CHANT,
-  GAME_WHACK, GAME_MATCH, GAME_STACK,  // more FUN games (no math)
+  GAME_WHACK, GAME_MATCH, GAME_STACK, GAME_FLAP, GAME_BRICKS,  // more FUN games (no math)
   GAME_COUNT
 };
 inline bool is_math_game(int kind) { return kind >= GAME_QUIZ && kind <= GAME_CHANT; }
@@ -152,6 +154,7 @@ static const size_t SAVE_V7_SIZE = 92;  // before the division game
 static const size_t SAVE_V8_SIZE = 96;  // before Chant
 static const size_t SAVE_V9_SIZE = 100;  // before the Math need
 static const size_t SAVE_V10_SIZE = 104;  // before Whack, Match and Stack
+static const size_t SAVE_V11_SIZE = 112;  // before Bricks
 static_assert(offsetof(SaveData, best_run) == SAVE_V1_SIZE, "v1 fields must stay where they were");
 static_assert(offsetof(SaveData, discipline) == SAVE_V2_SIZE, "v2 fields must stay where they were");
 static_assert(offsetof(SaveData, best_catch) == SAVE_V3_SIZE, "v3 fields must stay where they were");
@@ -162,7 +165,8 @@ static_assert(offsetof(SaveData, best_share) == SAVE_V7_SIZE, "v7 fields must st
 static_assert(offsetof(SaveData, chant_medals) == SAVE_V8_SIZE, "v8 fields must stay where they were");
 static_assert(offsetof(SaveData, math_need) == SAVE_V9_SIZE, "v9 fields must stay where they were");
 static_assert(offsetof(SaveData, best_whack) == SAVE_V10_SIZE, "v10 fields must stay where they were");
-static_assert(sizeof(SaveData) == 112, "save size");
+static_assert(offsetof(SaveData, best_bricks) == SAVE_V11_SIZE, "v11 fields must stay where they were");
+static_assert(sizeof(SaveData) == 116, "save size");
 
 // Growth by time together (seconds of SaveData::together_s) at which each stage starts, and when an elder
 // sets off and leaves an egg.
@@ -438,6 +442,15 @@ class PetEngine {
   void stack_update(float dt);
   void stack_press();
   void draw_stack(Canvas &c, uint32_t now);
+  void flap_start();
+  void flap_press();
+  void flap_update(float dt);
+  void draw_flap(Canvas &c, uint32_t now);
+  void bricks_start();
+  void bricks_wall();
+  void bricks_serve();
+  void bricks_update(float dt);
+  void draw_bricks(Canvas &c, uint32_t now);
   void food_effect(int id);  // what eating a food item does (bought, or a Chant gift)
 
   SaveData s_{};
@@ -511,6 +524,17 @@ class PetEngine {
   uint16_t stack_n_{0};
   float stack_x_{0}, stack_w_{0}, stack_dir_{1}, stack_speed_{0};
   uint32_t stack_fall_ms_{0};
+  // Flap
+  float flap_y_{0}, flap_vy_{0}, flap_speed_{0};
+  float flap_px_[3]{};
+  int16_t flap_gap_[3]{};
+  uint8_t flap_scored_{0};
+  // Bricks
+  uint8_t brick_[4][6]{};
+  uint8_t bricks_left_{0};
+  bool ball_held_{true};
+  float ball_x_{0}, ball_y_{0}, ball_vx_{0}, ball_vy_{0}, ball_speed_{0}, paddle_x_{180};
+  uint32_t serve_ms_{0};
 
  public:
   // For the simulator's players.
@@ -518,6 +542,19 @@ class PetEngine {
   int match_card(int i) const { return match_card_[i]; }
   int match_state(int i) const { return match_state_[i]; }
   float stack_offset() const { return stack_n_ ? stack_x_ - stack_bx_[(stack_n_ - 1) % 16] : 0; }
+  float flap_y() const { return flap_y_; }
+  float flap_vy() const { return flap_vy_; }
+  int flap_next_gap() const {  // the centre of the next gap ahead of the pet
+    int best = 0;
+    float bx = 1e9f;
+    for (int i = 0; i < 3; i++)
+      if (flap_px_[i] + 46 >= 118 - 16 && flap_px_[i] < bx) {
+        bx = flap_px_[i];
+        best = i;
+      }
+    return flap_gap_[best];
+  }
+  float ball_x() const { return ball_x_; }
 
  private:
   Overlay overlay_{OV_NONE};

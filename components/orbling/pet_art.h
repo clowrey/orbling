@@ -154,6 +154,9 @@ static const char *const MOLE_ICON[12] = {"............", "....KKKK....", "...KB
 static const char *const CARDS_ICON[12] = {"............", "KKKKKK......", "KLLLLK......", "KLWWLKKKKKK.", "KLWWLKCCCCK.", "KLLLLKCRRCK.", "KLLLLKCRRCK.", "KKKKKKCCCCK.", ".....KCCCCK.", ".....KKKKKK.", "............", "............"};
 static const char *const STACK_ICON[12] = {"............", "....KKKK....", "....KRRK....", "...KKKKKKK..", "...KYYYYYK..", "..KKKKKKKK..", "..KGGGGGGK..", ".KKKKKKKKKK.", ".KLLLLLLLLK.", ".KKKKKKKKKK.", "............", "............"};
 
+static const char *const FLAP_ICON[12] = {"KGK......KGK", "KGK......KGK", "KGK..KK..KGK", "KKK.KYYK.KKK", "....KYWKO...", "....KYYK....", ".....KK.....", "KKK......KKK", "KGK......KGK", "KGK......KGK", "KGK......KGK", "KGK......KGK"};
+static const char *const BRICKS_ICON[12] = {"KKKKKKKKKKKK", "KRRRKOOOKYYK", "KKKKKKKKKKKK", "KLLLKGGGKPPK", "KKKKKKKKKKKK", "............", "......KK....", ".....KWWK...", "......KK....", "............", "..KKKKKKKK..", "..KSSSSSSK.."};
+
 // --- math prizes and smarts ---
 static const char *const MINI_MATH[7] = {"KKKKKKK", "KLLLLLK", "KLWLWLK", "KLLWLLK", "KLWLWLK", "KLLLLLK", "KKKKKKK"};
 static const char *const MINI_BOOK[7] = {"KKKKKKK", "KLLKWWK", "KLLKWWK", "KLLKWWK", "KLLKWWK", "KKKKKKK", "......."};

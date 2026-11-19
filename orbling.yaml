@@ -224,6 +224,16 @@ sensor:
     update_interval: 60s
     lambda: return id(pet).pet().best_score(petcore::GAME_STACK);
   - platform: template
+    name: Best flap
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: return id(pet).pet().best_score(petcore::GAME_FLAP);
+  - platform: template
+    name: Best bricks
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: return id(pet).pet().best_score(petcore::GAME_BRICKS);
+  - platform: template
     name: Best chant
     accuracy_decimals: 0
     update_interval: 60s

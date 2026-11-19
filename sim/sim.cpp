@@ -941,8 +941,9 @@ int main(int argc, char **argv) {
   }
 
   printf("\nOther games, autoplay scores (5 runs each) by bot skill:\n");
-  static const char *const GAME_NAMES[GAME_COUNT] = {"jump", "catch", "pop",   "copy",  "quiz",  "facts", "fizz",
-                                                     "munch", "share", "chant", "whack", "match", "stack"};
+  static const char *const GAME_NAMES[GAME_COUNT] = {"jump",  "catch", "pop",   "copy",  "quiz",
+                                                     "facts", "fizz",  "munch", "share", "chant",
+                                                     "whack", "match", "stack", "flap",  "bricks"};
   for (int kind = GAME_CATCH; kind < GAME_CHANT; kind++)  // Chant has its own test
     for (float skill : {0.6f, 0.85f, 0.97f}) {
       printf("  %-5s skill %.2f:", GAME_NAMES[kind], skill);
@@ -955,9 +956,12 @@ int main(int argc, char **argv) {
       printf("\n");
     }
 
+  static const char *const GAME_NAMES_ALL[GAME_COUNT] = {"jump",  "catch", "pop",   "copy",  "quiz",
+                                                         "facts", "fizz",  "munch", "share", "chant",
+                                                         "whack", "match", "stack", "flap",  "bricks"};
   {  // The FUN games, played by simple bots: Whack taps what's up (not bombs), Match remembers every card, Stack
      // drops when the block is lined up (within a few px, or sloppy).
-    for (int kind : {GAME_WHACK, GAME_MATCH, GAME_STACK}) {
+    for (int kind : {GAME_WHACK, GAME_MATCH, GAME_STACK, GAME_FLAP, GAME_BRICKS}) {
       prep(e, 40 + kind, STAGE_ADULT);
       e.state().energy = 100;
       uint32_t t = 9000000u + kind * 1000000u;  // later than any earlier step's clock
@@ -991,13 +995,20 @@ int main(int argc, char **argv) {
           }
         } else if (kind == GAME_STACK && fabsf(e.stack_offset()) < (e.run_score() < 12 ? 3 : 9)) {
           tap(e, 180, 180, t);
+        } else if (kind == GAME_FLAP && e.flap_vy() > 0 && e.flap_y() > e.flap_next_gap() + 12) {
+          tap(e, 180, 180, t);  // flap when it has sunk below the middle of the next gap
+        } else if (kind == GAME_BRICKS && step % 3 == 0) {
+          e.touch_down((int) e.ball_x(), 300, t);  // keep the paddle under the ball
+          e.touch_move((int) e.ball_x(), 300);
+          e.touch_up(t);
         }
         if (!shot_taken && t > 9000000u + kind * 1000000u + 9000) {
-          shot(e, kind == GAME_WHACK ? "23b-whack" : kind == GAME_MATCH ? "23c-match" : "23d-stack", t);
+          shot(e, kind == GAME_WHACK ? "23b-whack" : kind == GAME_MATCH ? "23c-match" : kind == GAME_STACK ? "23d-stack"
+                  : kind == GAME_FLAP ? "23d2-flap" : "23d3-bricks", t);
           shot_taken = true;
         }
       }
-      printf("%s bot: score %d\n", kind == GAME_WHACK ? "whack" : kind == GAME_MATCH ? "match" : "stack", e.run_score());
+      printf("%s bot: score %d\n", GAME_NAMES_ALL[kind], e.run_score());
     }
     prep(e, 3, STAGE_ADULT);
     uint32_t t = 30000000u;
@@ -1007,7 +1018,7 @@ int main(int argc, char **argv) {
     shot(e, "23e-menu-fun", t);
     tap(e, 228, 74, t);
     shot(e, "23f-menu-math", t);
-    contact_sheet("fun", 3, "23");
+    contact_sheet("fun", 4, "23");
   }
 
   {  // Facts: the right answer typed with sloppy taps (up to 15 degrees and 20 px off a digit) always counts
